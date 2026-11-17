@@ -2,13 +2,15 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A static chat demo powered by the DeepSeek API. No application backend is required: the browser connects directly to the configured API service.
+A static chat demo powered by the DeepSeek API, modified into an agent that runs entirely in the browser.
 
-You can [try the app online](https://deepseek-ai.github.io/chat-demo/) or download the archive from [Releases](https://github.com/deepseek-ai/deepseek-chat-demo/releases), extract it, and double-click `index.html` to use it locally without installation or a build. Enter your API key in Settings before your first chat.
+This project provides a lightweight agent that improves the [Chat Demo](https://github.com/deepseek-ai/chat-demo) experience. It is not a replacement for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+
+Deploy it yourself, or [try the app online](https://seek.notfound.click). Enter your API key in Settings before your first chat.
 
 ## Getting started
 
-Install Node.js 22.12+ and pnpm, then run:
+Install Node.js 22.12+ and pnpm:
 
 ```sh
 git clone https://github.com/deepseek-ai/chat-demo.git
@@ -30,10 +32,12 @@ The output is written to `dist/`. Deploy it to a static web server or open `dist
 ## Features
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.
-- Streaming replies, deep thinking, smart search, link reading, and source citations; stop generation or continue eligible replies.
+- Streaming replies and deep thinking; stop generation or continue eligible replies.
 - Upload, paste, or drag and drop attachments; use voice input and read replies aloud. A live audio spectrum appears in the first row of the input area while recording on mobile.
 - Markdown, syntax highlighting, KaTeX math, and Mermaid diagrams.
 - Simplified Chinese and English, light and dark themes, mobile layouts, location settings, and chat history import and export.
+- A lightweight built-in agent loop: the model can call tools across several rounds.
+- Built-in tools include the original web search and page fetching, plus a per-conversation virtual file system and a JavaScript sandbox.
 
 ## Data and storage
 
@@ -55,7 +59,7 @@ Settings → Data → Delete all chats clears all local conversations, original 
 
 [rspack.config.ts](rspack.config.ts) uses `https://api.deepseek.com` by default. Use `createConfig({ apiOrigin, devServer })` to customize the API origin and development server proxy.
 
-Chat uses `deepseek-flash` by default through Anthropic-compatible Messages / Files APIs. Speech features use ASR / TTS endpoints. Web search and page fetching are declared as client tools (`web_search` / `fetch_url`): the browser calls `/v1/tools/search` and `/v1/tools/fetch`, then returns `tool_result` blocks so the model can continue. Requests also use extensions for titles and `latest_reminder`, so the configured service must support the corresponding capabilities. Supported attachment formats are determined by server-side validation.
+Chat uses `deepseek-flash` by default. Messages are sent through Chat Completions (`/chat/completions`); attachments are uploaded through the Anthropic-compatible Files API (`/anthropic/v1/files`); speech features use ASR / TTS endpoints. Web search and page fetching are declared as client tools (`web_search` / `fetch_url`): the browser calls `/v1/tools/search` and `/v1/tools/fetch`, then returns `tool_result` blocks so the model can continue. Requests also use extensions for titles and `latest_reminder`, so the configured service must support the corresponding capabilities. Supported attachment formats are determined by server-side validation.
 
 ```text
 src/

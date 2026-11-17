@@ -2,9 +2,11 @@
 
 [English](README.md) | 简体中文
 
-基于 DeepSeek API 的静态聊天示例。无需应用后端，浏览器直接请求配置的 API 服务。
+基于 DeepSeek API 的静态聊天示例修改的 Agent，完全在浏览器中运行。
 
-点击 [在线体验](https://deepseek-ai.github.io/chat-demo/) 即可使用，也可以前往 [Releases](https://github.com/deepseek-ai/deepseek-chat-demo/releases) 下载压缩包，解压后双击 `index.html` 在本地使用，无需安装或构建。首次使用时，请在设置中填写 API Key。
+本项目提供一个轻量 Agent，用于提升 [Chat Demo](https://github.com/deepseek-ai/chat-demo) 的使用体验，并非 [Deepseek Harness](https://github.com/deepseek-ai/deepseek-harness) 的替代品。
+
+建议你自行部署，或点击 [在线体验](https://seek.notfound.click) 在线使用。请在设置中填写 API Key。
 
 ## 运行
 
@@ -30,10 +32,12 @@ pnpm build
 ## 功能
 
 - 多会话、自动标题、重命名与删除；编辑提问、重新生成和切换消息分支。
-- 流式回答、深度思考、智能搜索、链接阅读与来源引用；支持停止和符合条件的继续生成。
+- 流式回答、深度思考，支持停止和符合条件的继续生成。
 - 附件上传、粘贴与拖拽，语音输入和回复朗读；移动端录音时输入框首行显示实时频谱。
 - Markdown、代码高亮、KaTeX 公式和 Mermaid 图表。
 - 简体中文与英文、浅色与深色主题、移动端布局、位置设置、历史导入导出。
+- 内置轻量 Agent 循环，模型可多轮调用工具。
+- 内置工具包括原先的联网搜索、网页抓取；新增的会话级虚拟文件系统和 Javascript 沙箱。
 
 ## 数据
 
@@ -55,7 +59,7 @@ API Key 和设置保存在浏览器 localStorage，会话及附件原件保存�
 
 [rspack.config.ts](rspack.config.ts) 默认连接 `https://api.deepseek.com`。`createConfig({ apiOrigin, devServer })` 支持自定义 API 地址和开发服务器代理。
 
-聊天默认使用 `deepseek-flash`，通过 Anthropic 兼容的 Messages / Files API 通信；语音使用 ASR / TTS 接口。联网搜索与网页抓取声明为客户端工具（`web_search` / `fetch_url`），由浏览器调用 `/v1/tools/search` 与 `/v1/tools/fetch` 执行，模型返回 `tool_use` 后本地执行、回传 `tool_result` 再继续生成。请求还使用标题、`latest_reminder` 等扩展，接入服务需支持相应能力。附件实际支持的格式以服务端校验为准。
+聊天默认使用 `deepseek-flash`，消息通过 Chat Completions（`/chat/completions`）发送，附件通过 Anthropic 兼容的 Files API（`/anthropic/v1/files`）上传；语音使用 ASR / TTS 接口。联网搜索与网页抓取声明为客户端工具（`web_search` / `fetch_url`），由浏览器调用 `/v1/tools/search` 与 `/v1/tools/fetch` 执行，模型返回 `tool_use` 后本地执行、回传 `tool_result` 再继续生成。请求还使用标题、`latest_reminder` 等扩展，接入服务需支持相应能力。附件实际支持的格式以服务端校验为准。
 
 ```text
 src/
