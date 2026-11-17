@@ -1,0 +1,192 @@
+.stage {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border-radius: 16px;
+  background-color: var(--dsw-alias-bg-skeleton);
+}
+
+.video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+/* 前摄画面按镜子方向显示，后摄保持真实方向 */
+.mirror {
+  transform: scaleX(-1);
+}
+
+.hidden {
+  opacity: 0;
+}
+
+.state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.stateIcon {
+  display: flex;
+  color: var(--dsw-alias-label-caption);
+
+  svg {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+.message {
+  margin: 0;
+  max-width: 240px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.stateActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.spinner {
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--dsw-alias-label-tertiary);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 连拍计数压在预览左上角，不遮挡画面中心 */
+.count {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-static-neutral-bluish-00);
+  background-color: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+/* 快门反馈：一张白场淡出，减少「按下去没反应」的迟疑 */
+.flash {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background-color: #fff;
+  animation: flash 0.28s ease-out forwards;
+}
+
+@keyframes flash {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.start {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.end {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 快门沿用按钮的统一圆角与描边重量，内圈用主文字色，深浅主题都成立 */
+.shutter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 2px solid var(--dsw-alias-label-primary);
+  border-radius: 50%;
+  background-color: transparent;
+  cursor: pointer;
+  outline: none;
+  transition:
+    opacity var(--ds-transition-duration) var(--ds-ease-in-out),
+    box-shadow var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
+.shutterCore {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--dsw-alias-label-primary);
+  transition: transform var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.shutter:active:not(:disabled) .shutterCore {
+  transform: scale(0.86);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash {
+    display: none;
+  }
+
+  .video,
+  .shutter,
+  .shutterCore {
+    transition: none;
+  }
+
+  .spinner {
+    animation: none;
+  }
+}

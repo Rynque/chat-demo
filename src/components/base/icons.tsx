@@ -531,6 +531,32 @@ export const IconImageOutline16 = () => (
   </svg>
 )
 
+/** 拍照入口：机身 + 顶部取景凸起 + 镜头，镜头内留空 */
+export const IconCameraOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect
+      x="1.6"
+      y="4.7"
+      width="12.8"
+      height="9.3"
+      rx="2.8"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+    />
+    <path
+      d="M5.9 4.7L6.7 2.9H9.3L10.1 4.7"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="8" cy="9.4" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="12.5" cy="6.9" r="0.55" fill="currentColor" />
+  </svg>
+)
+
 /** 错误提示图标：圆环 + 感叹号，颜色跟随 currentColor */
 export const IconToastError16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
