@@ -208,6 +208,13 @@ const ToolStepRow = ({ step, isLast }: { step: ToolStep; isLast: boolean }) => {
                   </span>
                 ) : null}
                 {section.content}
+                {section.output
+                  ? section.output.split('\n').map((line, index) => (
+                      <span key={index} className={styles.toolOutput}>
+                        {`\n> ${line}`}
+                      </span>
+                    ))
+                  : null}
               </pre>
             </div>
           ))}

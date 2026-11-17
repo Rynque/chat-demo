@@ -98,6 +98,8 @@ export type ToolSection = {
   /** 块标题：`js` / `stdout` / 文件路径等 */
   label: string
   content: string
+  /** 命令块的标准输出：跟在代码后面、每行加 `>`，用弱化颜色区分 */
+  output?: string
   /** 需要命令提示符前缀（执行 JS 时） */
   command?: boolean
   truncated?: boolean

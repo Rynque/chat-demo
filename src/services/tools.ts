@@ -330,20 +330,29 @@ const runJsTool: Tool = {
         written[path] = content
       }
     }
-    // 一个下拉里按块展示：代码与 stdout 合成一块（输出行用 > 前缀），再是返回值与写入的文件
+    // 一个下拉里按块展示：代码块带 stdout 输出（换行 + > 前缀），再是返回值与写入的文件
     const out = result.stdout.trimEnd()
-    const script = out
-      ? `${code.trimEnd()}\n${out
-          .split('\n')
-          .map((line) => `> ${line}`)
-          .join('\n')}`
-      : code.trimEnd()
-    const sections = previewSections([
-      { label: 'js', content: script, command: true },
+    const budget = { left: MAX_PREVIEW_TOTAL }
+    const script = previewSection('js', code.trimEnd(), { command: true, budget })
+    const stdout = out ? previewSection('stdout', out, { budget }) : null
+    const sections: ToolSection[] = []
+    if (script) {
+      sections.push({
+        ...script,
+        ...(stdout ? { output: stdout.content } : {}),
+        ...(stdout?.truncated ? { truncated: true } : {}),
+      })
+    }
+    for (const item of [
       ...(result.stderr ? [{ label: 'stderr', content: result.stderr.trimEnd() }] : []),
       ...(result.value !== undefined ? [{ label: '返回值', content: result.value }] : []),
       ...Object.entries(written).map(([path, content]) => ({ label: path, content })),
-    ])
+    ]) {
+      const section = previewSection(item.label, item.content, { budget })
+      if (section) {
+        sections.push(section)
+      }
+    }
     return toolOutcome('js_run', summary, parts.join('\n\n') || '（脚本没有输出）', sections)
   },
 }

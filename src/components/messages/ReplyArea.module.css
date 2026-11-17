@@ -315,6 +315,11 @@
   user-select: none;
 }
 
+/* 脚本的标准输出：比代码弱一级，避免被当成脚本内容 */
+.toolOutput {
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .page {
   display: inline-flex;
   align-items: center;
