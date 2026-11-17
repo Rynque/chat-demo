@@ -347,6 +347,56 @@ const runJsTool: Tool = {
   },
 }
 
+/** 运行虚拟文件：按 JS 执行文件内容，界面块展示返回值或错误 */
+const runFileTool: Tool = {
+  declaration: {
+    name: 'js_run_file',
+    description: '执行虚拟文件中的 JavaScript，返回返回值或错误信息。',
+    input_schema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: '要执行的虚拟文件路径。' } },
+      required: ['path'],
+    },
+  },
+  run: async (input, { sessionId }) => {
+    const file = await readFile(sessionId, readString(input.path))
+    const files = await snapshot(sessionId)
+    const result = await runScript({
+      code: file.content,
+      files,
+      timeoutMs: EXEC_TIMEOUT_MS,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+    })
+    const changed =
+      Object.keys(result.files).length > 0 ? await applyWrites(sessionId, result.files) : []
+    const parts: string[] = []
+    if (result.value !== undefined) {
+      parts.push(`返回值：\n${result.value}`)
+    }
+    if (result.stdout) {
+      parts.push(`stdout:\n${result.stdout.trimEnd()}`)
+    }
+    if (result.stderr) {
+      parts.push(`stderr:\n${result.stderr.trimEnd()}`)
+    }
+    if (changed.length > 0) {
+      parts.push(`写入文件：${changed.join(', ')}`)
+    }
+    if (!result.ok) {
+      parts.push(`错误：${result.error ?? '执行失败'}`)
+    }
+    const shown = result.ok
+      ? (result.value ?? (result.stdout.trimEnd() || '（脚本没有返回值）'))
+      : (result.error ?? '执行失败')
+    return toolOutcome(
+      'js_run_file',
+      `运行 ${file.path}`,
+      parts.join('\n\n') || '（没有输出）',
+      previewSections([{ label: `运行文件：${file.path}`, content: shown }])
+    )
+  },
+}
+
 /** 新增工具只需在这里加一项：声明给模型、执行在本地 */
 const TOOLS: Tool[] = [
   webSearchTool,
@@ -356,6 +406,7 @@ const TOOLS: Tool[] = [
   vfsWriteTool,
   vfsDeleteTool,
   runJsTool,
+  runFileTool,
 ]
 
 export const TOOL_DECLARATIONS = TOOLS.map((tool) => tool.declaration)
