@@ -201,7 +201,8 @@ export type CreateMessageRequest = {
   messages: MessageParam[]
   thinking: { type: 'enabled' | 'disabled' }
   tools: ClientToolDeclaration[]
-  safety_check: { level: 'high' }
+  /** 内容安全审核：属于“扩展模式”，只能与思考模式下的客户端工具同场，关闭思考时省略 */
+  safety_check?: { level: 'high' }
   title?: { enabled: boolean }
 }
 

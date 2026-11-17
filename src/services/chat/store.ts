@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
 import { ApiError } from '../api/client.js'
 import { streamChatMessage } from '../api/chatCompletions.js'
-import type { ChatModel } from '../api/types.js'
+import type { ChatModel, MessageParam } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { useSettings } from '../settings.js'
@@ -1015,6 +1015,43 @@ const runToolCalls = async (sessionId: string, reply: AssistantMessage, signal: 
 }
 
 /**
+ * 关思考时单独请求标题：主请求带客户端工具，不能同时带 title（服务端“扩展模式”限制），
+ * 因此标题改用一条不带工具的请求补发；失败不影响正文。
+ */
+const generateTitle = async (sessionId: string, messages: MessageParam[], signal: AbortSignal) => {
+  try {
+    const events = streamChatMessage(
+      useSettings.getState().apiKey ?? '',
+      {
+        model: MODEL,
+        system: SYSTEM_PROMPT,
+        messages,
+        thinking: { type: 'disabled' },
+        tools: [],
+        title: { enabled: true },
+      },
+      signal
+    )
+    for await (const event of events) {
+      if (event.type !== 'message_delta') {
+        continue
+      }
+      const title = event.delta.title?.trim()
+      if (!title) {
+        continue
+      }
+      if (!getSession(sessionId)?.title) {
+        updateSession(sessionId, (session) => (session.title ? session : { ...session, title }))
+        persist(sessionId)
+      }
+      return
+    }
+  } catch {
+    // 标题属于附加信息，失败时保留默认标题
+  }
+}
+
+/**
  * 请求并消费流：先补齐附件的 serverId，再发请求；流式增量按动画帧刷新内存，完成、失败或停止后落盘。
  * 消息请求走 Chat Completions（非思考模式也支持客户端工具），内部事件仍按原有方式处理。
  * 回复停在客户端工具调用上时本地执行工具、回传结果并继续下一轮，最多 MAX_TOOL_ROUNDS 轮。
@@ -1037,6 +1074,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   streamFlushes.set(sessionId, flush)
 
   try {
+    /** 本轮请求的 messages 前缀，关思考时用于补发标题请求 */
+    let base: MessageParam[] = []
     for (let round = 0; ; round += 1) {
       /** 这一轮是否收到了正常的 message_stop */
       let complete = false
@@ -1054,7 +1093,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           reply = { ...reply, latestReminder }
           updateReply(sessionId, reply)
           persist(sessionId)
-          const base = toRequestMessages(
+          base = toRequestMessages(
             prepared.history,
             prepared.question,
             prepared.prefix,
@@ -1069,9 +1108,15 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
               system: SYSTEM_PROMPT,
               messages,
               thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-              safety_check: SAFETY_CHECK,
+              // safety_check 与 title 属于“扩展模式”，只在思考模式下能和客户端工具同场；
+              // 关思考时省略，标题改由 generateTitle 单独请求（见下）。
+              ...(initial.thinking
+                ? {
+                    safety_check: SAFETY_CHECK,
+                    ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
+                  }
+                : {}),
               tools: TOOL_DECLARATIONS,
-              ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
             },
             controller.signal
           )
@@ -1169,6 +1214,15 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = settleReply(reply, 'stopped', Date.now())
         break
       }
+    }
+    // 关思考时主请求不能带 title（服务端“扩展模式”限制），补一条不带工具的标题请求
+    if (
+      !initial.thinking &&
+      !controller.signal.aborted &&
+      titleRequests.has(controller) &&
+      !getSession(sessionId)?.title
+    ) {
+      void generateTitle(sessionId, base, controller.signal)
     }
   } finally {
     titleRequests.delete(controller)
