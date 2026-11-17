@@ -330,10 +330,16 @@ const runJsTool: Tool = {
         written[path] = content
       }
     }
-    // 一个下拉里按块展示：执行的代码（带提示符）、输出、返回值、写入的文件
+    // 一个下拉里按块展示：代码与 stdout 合成一块（输出行用 > 前缀），再是返回值与写入的文件
+    const out = result.stdout.trimEnd()
+    const script = out
+      ? `${code.trimEnd()}\n${out
+          .split('\n')
+          .map((line) => `> ${line}`)
+          .join('\n')}`
+      : code.trimEnd()
     const sections = previewSections([
-      { label: 'js', content: code.trimEnd(), command: true },
-      ...(result.stdout ? [{ label: 'stdout', content: result.stdout.trimEnd() }] : []),
+      { label: 'js', content: script, command: true },
       ...(result.stderr ? [{ label: 'stderr', content: result.stderr.trimEnd() }] : []),
       ...(result.value !== undefined ? [{ label: '返回值', content: result.value }] : []),
       ...Object.entries(written).map(([path, content]) => ({ label: path, content })),
