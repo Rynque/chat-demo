@@ -64,12 +64,11 @@ const readSearchResults = (value: unknown): ToolSource[] => {
 const webSearchTool: Tool = {
   declaration: {
     name: 'web_search',
-    description:
-      '搜索网页。需要最新信息、外部事实核查，或用户明确要求联网检索时使用；返回标题、链接与摘要。',
+    description: '按查询词检索网页，返回标题、链接与摘要。',
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: '搜索词，支持 site: 等语法，最多 128 字符' },
+        query: { type: 'string', description: '查询词，支持 site: 等检索语法，长度上限 128 字符。' },
       },
       required: ['query'],
     },
@@ -97,12 +96,11 @@ const webSearchTool: Tool = {
 const fetchTool: Tool = {
   declaration: {
     name: 'fetch_url',
-    description:
-      '抓取指定网页，返回标题与 Markdown 正文。用户给出链接、或搜索结果需要展开细节时使用。',
+    description: '抓取指定 URL，返回页面标题与 Markdown 正文。',
     input_schema: {
       type: 'object',
       properties: {
-        url: { type: 'string', description: '要抓取的 HTTP/HTTPS 地址' },
+        url: { type: 'string', description: '要抓取的 HTTP 或 HTTPS 地址。' },
       },
       required: ['url'],
     },
@@ -206,13 +204,13 @@ const vfsListTool: Tool = {
 const vfsReadTool: Tool = {
   declaration: {
     name: 'vfs_read',
-    description: '读取虚拟文件，返回带行号的内容；可用 offset/limit 读取片段。',
+    description: '读取虚拟文件，返回带行号的内容；offset 与 limit 用于截取片段。',
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '文件路径，例如 notes/todo.md' },
-        offset: { type: 'integer', description: '起始行号，从 1 开始，默认 1' },
-        limit: { type: 'integer', description: '最多读取的行数，默认 200，上限 400' },
+        path: { type: 'string', description: '虚拟文件路径，例如 notes/todo.md。' },
+        offset: { type: 'integer', description: '起始行号，从 1 开始，默认 1。' },
+        limit: { type: 'integer', description: '最多读取的行数，默认 200，上限 400。' },
       },
       required: ['path'],
     },
@@ -241,12 +239,12 @@ const vfsReadTool: Tool = {
 const vfsWriteTool: Tool = {
   declaration: {
     name: 'vfs_write',
-    description: '写入或覆盖虚拟文件。有单文件大小、会话总量和文件数配额，超出会报错。',
+    description: '写入或覆盖虚拟文件。受单文件大小、会话总量与文件数配额限制，超出时返回错误。',
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '文件路径，例如 notes/todo.md' },
-        content: { type: 'string', description: '完整文件内容（文本）' },
+        path: { type: 'string', description: '虚拟文件路径，例如 notes/todo.md。' },
+        content: { type: 'string', description: '完整文件内容，文本。' },
       },
       required: ['path', 'content'],
     },
@@ -269,7 +267,7 @@ const vfsDeleteTool: Tool = {
     description: '删除虚拟文件。',
     input_schema: {
       type: 'object',
-      properties: { path: { type: 'string', description: '要删除的文件路径' } },
+      properties: { path: { type: 'string', description: '要删除的文件路径。' } },
       required: ['path'],
     },
   },
@@ -283,11 +281,11 @@ const runJsTool: Tool = {
   declaration: {
     name: 'js_run',
     description:
-      '在隔离的 Worker 中执行 JavaScript（不是 Node：没有 require、fetch、DOM，也不能访问网络）。可用 console.log/print 输出，用 fs.readFile / fs.writeFile / fs.appendFile / fs.exists / fs.unlink / fs.list 读写虚拟文件。支持顶层 await。',
+      '在 Worker 沙箱中执行 JavaScript。运行环境不提供 require、fetch、DOM 与网络访问；提供 console、print 与 fs 接口（readFile、writeFile、appendFile、exists、unlink、list），用于读写当前会话的虚拟文件。支持顶层 await。',
     input_schema: {
       type: 'object',
       properties: {
-        code: { type: 'string', description: '要执行的 JavaScript 代码，可直接使用 await' },
+        code: { type: 'string', description: '要执行的 JavaScript 代码，可使用 await。' },
       },
       required: ['code'],
     },
