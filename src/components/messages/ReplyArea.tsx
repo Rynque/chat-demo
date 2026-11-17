@@ -167,14 +167,48 @@ const StepItem = ({
   }
 }
 
-/** 虚拟文件与脚本工具：一行摘要，失败时标红 */
-const ToolStepRow = ({ step, isLast }: { step: ToolStep; isLast: boolean }) => (
-  <ToolRow icon={<IconCodeOutline16 />} isLast={isLast}>
+/** 虚拟文件与脚本工具：有写入结果时可展开查看文件内容 */
+const ToolStepRow = ({ step, isLast }: { step: ToolStep; isLast: boolean }) => {
+  const t = useTranslate()
+  const [open, setOpen] = useState(false)
+  const files = step.files ?? []
+  const expandable = files.length > 0
+  const label = (
     <span className={clsx(styles.intro, step.status === 'failed' && styles.chipFailed)}>
       {step.summary}
     </span>
-  </ToolRow>
-)
+  )
+  return (
+    <ToolRow icon={<IconCodeOutline16 />} isLast={isLast}>
+      {expandable ? (
+        <button
+          type="button"
+          className={styles.toolToggle}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {label}
+          {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+        </button>
+      ) : (
+        label
+      )}
+      {expandable && open ? (
+        <div className={styles.toolFiles}>
+          {files.map((file) => (
+            <div key={file.path} className={styles.toolFile}>
+              <div className={styles.toolFileHeader}>
+                <span className={styles.toolFileName}>{file.path}</span>
+                {file.truncated ? <span>{t('toolOutputTruncated')}</span> : null}
+              </div>
+              <pre className={styles.toolFileCode}>{file.content}</pre>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </ToolRow>
+  )
+}
 
 /** 思考或过程性文字：左侧圆点 + 竖线，小号 markdown */
 const ContentItem = ({

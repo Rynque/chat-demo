@@ -1,6 +1,6 @@
 import { request, API_ORIGIN } from './api/client.js'
 import type { ClientToolDeclaration } from './api/types.js'
-import type { ToolCallData, ToolSource } from './chat/types.js'
+import type { ToolCallData, ToolFilePreview, ToolSource } from './chat/types.js'
 import { applyWrites, deleteFile, listFiles, readFile, snapshot, writeFile } from './vfs.js'
 import { runScript } from './tools/jsSandbox.js'
 
@@ -130,16 +130,39 @@ const fetchTool: Tool = {
 /** 脚本执行的时长与输出上限：超出即终止 Worker */
 const EXEC_TIMEOUT_MS = 5000
 const MAX_OUTPUT_BYTES = 8192
+/** 时间线展开预览的上限：避免把整份文件复制进消息记录 */
+const MAX_PREVIEW_CHARS = 8000
+const MAX_PREVIEW_TOTAL = 20000
 
 const toolOutcome = (
   name: string,
   summary: string,
   content: string,
-  detail?: string
+  files?: ToolFilePreview[]
 ): ToolOutcome => ({
   content,
-  data: { kind: 'tool', name, summary, ...(detail ? { detail } : {}) },
+  data: { kind: 'tool', name, summary, ...(files && files.length > 0 ? { files } : {}) },
 })
+
+/** 把写入的文件转成可展开预览，超长截断并标注 */
+const previewFiles = (files: Record<string, string>): ToolFilePreview[] => {
+  const previews: ToolFilePreview[] = []
+  let budget = MAX_PREVIEW_TOTAL
+  for (const [path, content] of Object.entries(files)) {
+    if (budget <= 0) {
+      break
+    }
+    const limit = Math.min(MAX_PREVIEW_CHARS, budget)
+    const truncated = content.length > limit
+    previews.push({
+      path,
+      content: truncated ? `${content.slice(0, limit)}\n…` : content,
+      ...(truncated ? { truncated: true } : {}),
+    })
+    budget -= Math.min(content.length, limit)
+  }
+  return previews
+}
 
 const countLines = (text: string) => (text === '' ? 0 : text.split('\n').length)
 
@@ -213,7 +236,8 @@ const vfsWriteTool: Tool = {
     return toolOutcome(
       'vfs_write',
       `写入 ${result.path}（${result.size} B）`,
-      `已写入 ${result.path}（${result.size} B，${countLines(content)} 行）。`
+      `已写入 ${result.path}（${result.size} B，${countLines(content)} 行）。`,
+      previewFiles({ [result.path]: content })
     )
   },
 }
@@ -278,7 +302,19 @@ const runJsTool: Tool = {
       parts.push(`错误：${result.error ?? '执行失败'}`)
     }
     const summary = changed.length > 0 ? `运行 JS，写入 ${changed.length} 个文件` : '运行 JS'
-    return toolOutcome('js_run', summary, parts.join('\n\n') || '（脚本没有输出）')
+    const written: Record<string, string> = {}
+    for (const path of changed) {
+      const content = result.files[path]
+      if (content !== undefined) {
+        written[path] = content
+      }
+    }
+    return toolOutcome(
+      'js_run',
+      summary,
+      parts.join('\n\n') || '（脚本没有输出）',
+      previewFiles(written)
+    )
   },
 }
 

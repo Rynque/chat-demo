@@ -232,6 +232,83 @@
   font-variant: tabular-nums;
 }
 
+/* 可展开的工具步骤：摘要 + 折叠箭头，展开后逐个文件显示代码块 */
+.toolToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+
+  svg {
+    flex-shrink: 0;
+    color: var(--dsw-alias-label-tertiary);
+  }
+
+  @media (hover: hover) {
+    &:hover .intro {
+      color: var(--dsw-alias-label-primary);
+    }
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
+  }
+}
+
+.toolFiles {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 2px;
+}
+
+.toolFile {
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background-color: var(--dsw-specific-input-major);
+}
+
+.toolFileHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.toolFileName {
+  overflow: hidden;
+  font-family: var(--ds-font-family-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolFileCode {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .page {
   display: inline-flex;
   align-items: center;

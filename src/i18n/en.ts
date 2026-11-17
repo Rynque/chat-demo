@@ -119,6 +119,7 @@ export const en = {
     'File tools and scripts read and write these files; exceeding a limit fails the call. Changes apply immediately.',
   settingsVfsUsageLabel: 'Storage used',
   settingsVfsUsage: '{count} files · {size}',
+  toolOutputTruncated: 'truncated',
   avatarMenuSettingsDialogThemeItemLabel: 'Theme',
   avatarMenuSettingsDialogThemeSelectLightOption: 'Light',
   avatarMenuSettingsDialogThemeSelectDarkOption: 'Dark',

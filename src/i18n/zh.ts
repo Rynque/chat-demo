@@ -113,6 +113,7 @@ export const zh = {
   settingsVfsLimitsDescription: '虚拟文件由文件工具与脚本读写，超出上限会直接报错；修改立即生效。',
   settingsVfsUsageLabel: '已用空间',
   settingsVfsUsage: '{count} 个文件 · {size}',
+  toolOutputTruncated: '已截断',
   avatarMenuSettingsDialogThemeItemLabel: '主题',
   avatarMenuSettingsDialogThemeSelectLightOption: '浅色',
   avatarMenuSettingsDialogThemeSelectDarkOption: '深色',

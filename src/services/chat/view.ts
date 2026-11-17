@@ -6,7 +6,12 @@ import type {
   WebSearchResult,
   WebSearchToolResultBlock,
 } from '../api/types.js'
-import type { AssistantMessage, ThinkingPart, ToolResultPart } from './types.js'
+import type {
+  AssistantMessage,
+  ThinkingPart,
+  ToolFilePreview,
+  ToolResultPart,
+} from './types.js'
 
 /**
  * 由回复的内容块推导界面需要的结构：思考与工具步骤的时间线、带引用角标的正文、可引用的来源列表。
@@ -68,7 +73,8 @@ export type ToolStep = {
   name: string
   summary: string
   status: ToolStatus
-  detail?: string
+  /** 可展开查看的文件预览（写入结果） */
+  files?: ToolFilePreview[]
 }
 
 export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart[] }
@@ -287,7 +293,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
           name: data.name,
           summary: data.summary,
           status,
-          ...(data.detail ? { detail: data.detail } : {}),
+          ...(data.files && data.files.length > 0 ? { files: data.files } : {}),
         })
       } else if (data?.kind === 'fetch' || block.name === 'fetch_url') {
         // 抓取网页：进行中先显示目标地址，完成后换成页面标题

@@ -93,11 +93,18 @@ export type ToolSource = {
   publishedAt: string | null
 }
 
+/** 工具步骤里可展开查看的文件预览，内容超长时截断并标记 */
+export type ToolFilePreview = {
+  path: string
+  content: string
+  truncated?: boolean
+}
+
 export type ToolCallData =
   | { kind: 'search'; query: string; results: ToolSource[] }
   | { kind: 'fetch'; url: string; title: string; excerpt: string }
   /** 通用工具步骤：虚拟文件操作、脚本执行等，summary 直接展示在时间线上 */
-  | { kind: 'tool'; name: string; summary: string; detail?: string }
+  | { kind: 'tool'; name: string; summary: string; files?: ToolFilePreview[] }
 
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；
