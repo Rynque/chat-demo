@@ -5,6 +5,7 @@ import {
   getVisibleMessages,
   type MessageVersions,
 } from '../../services/chat/branches.js'
+import { onFocusMessage, takeFocusedMessage } from '../../services/chat/focusMessage.js'
 import { selectMessageVersion } from '../../services/chat/store.js'
 import type { Session } from '../../services/chat/types.js'
 import { closeSearchPanel } from '../search/searchPanelState.js'
@@ -100,6 +101,25 @@ export const MessageList = ({
   }, [session.id, lastMessageId, scrollToBottom])
 
   useEffect(closeSearchPanel, [session.id, lastMessageId])
+
+  // 搜索命中跳转：目标消息渲染出来后滚到视口，之后不再跟随底部
+  const [focusId, setFocusId] = useState<string | null>(takeFocusedMessage)
+  useEffect(() => onFocusMessage(setFocusId), [])
+  useLayoutEffect(() => {
+    const scroll = scrollRef.current
+    const target =
+      focusId && scroll
+        ? scroll.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(focusId)}"]`)
+        : null
+    if (!scroll || !target) {
+      // 会话还在加载时先留着，等这次渲染有消息了再定位
+      return
+    }
+    stickyRef.current = false
+    scroll.scrollTop += target.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 16
+    scrollTopRef.current = scroll.scrollTop
+    setFocusId(null)
+  }, [focusId, session.id, lastMessageId])
 
   const selectVersion = useCallback(
     (messageId: string, anchorTop: number) => {

@@ -1,7 +1,12 @@
 import clsx from 'clsx'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
+import {
+  IconPanelLeftOutline16,
+  IconSearchOutline16,
+  IconSettingsOutline16,
+  NewChatIcon,
+} from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
@@ -12,6 +17,7 @@ import { Modal } from '../base/Modal.js'
 import { showToast } from '../base/toastState.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
+import { HistorySearch } from './HistorySearch.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
 
@@ -24,6 +30,19 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
   const [deletePending, setDeletePending] = useState(false)
+  const [searching, setSearching] = useState(false)
+
+  // ⌘K / Ctrl+K 打开搜索
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setSearching(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -51,46 +70,62 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
 
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
-      <div className={styles.top}>
-        <div className={styles.appName}>{t('appName')}</div>
-        <IconButton
-          size="m"
-          icon={<IconPanelLeftOutline16 />}
-          tooltip={t('collapseSiderbarButton')}
-          tooltipPlacement="bottom"
-          onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
-        />
-      </div>
-      <button
-        type="button"
-        className={styles.newChat}
-        onClick={() => {
-          newChat()
-          closeMobileSider()
-        }}
-      >
-        <span className={styles.newChatIcon}>
-          <NewChatIcon />
-        </span>
-        {t('newChat')}
-      </button>
-      <div className={styles.listWrap}>
-        <div className={styles.list}>
-          {groups.map((group) => (
-            <div key={group.key} className={styles.section}>
-              <div className={styles.sectionHeader}>{group.label}</div>
-              {group.sessions.map((session) => (
-                <SessionItem
-                  key={session.id}
-                  session={session}
-                  active={session.id === activeId}
-                  onDelete={() => setDeleting(session)}
-                />
+      {searching ? (
+        <HistorySearch onClose={() => setSearching(false)} />
+      ) : (
+        <>
+          <div className={styles.top}>
+            <div className={styles.appName}>{t('appName')}</div>
+            <div className={styles.topActions}>
+              <IconButton
+                size="m"
+                tone="primary"
+                icon={<IconSearchOutline16 />}
+                tooltip={t('historySearchTrigger')}
+                tooltipPlacement="bottom"
+                onClick={() => setSearching(true)}
+              />
+              <IconButton
+                size="m"
+                icon={<IconPanelLeftOutline16 />}
+                tooltip={t('collapseSiderbarButton')}
+                tooltipPlacement="bottom"
+                onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            className={styles.newChat}
+            onClick={() => {
+              newChat()
+              closeMobileSider()
+            }}
+          >
+            <span className={styles.newChatIcon}>
+              <NewChatIcon />
+            </span>
+            {t('newChat')}
+          </button>
+          <div className={styles.listWrap}>
+            <div className={styles.list}>
+              {groups.map((group) => (
+                <div key={group.key} className={styles.section}>
+                  <div className={styles.sectionHeader}>{group.label}</div>
+                  {group.sessions.map((session) => (
+                    <SessionItem
+                      key={session.id}
+                      session={session}
+                      active={session.id === activeId}
+                      onDelete={() => setDeleting(session)}
+                    />
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
       <div className={styles.bottom}>
         <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
           <span className={styles.settingsIcon}>

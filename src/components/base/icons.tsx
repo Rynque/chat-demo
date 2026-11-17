@@ -557,6 +557,20 @@ export const IconCameraOutline16 = () => (
   </svg>
 )
 
+/** 搜索视图的返回：退出搜索回到会话列表 */
+export const IconArrowLeftOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M13 8H3.2M7.4 3.8L3.2 8L7.4 12.2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 /** 错误提示图标：圆环 + 感叹号，颜色跟随 currentColor */
 export const IconToastError16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
