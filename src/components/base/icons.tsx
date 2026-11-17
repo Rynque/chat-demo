@@ -571,6 +571,26 @@ export const IconArrowLeftOutline16 = () => (
   </svg>
 )
 
+/** 会话气泡：搜索结果里代表"一段对话"的图标 */
+export const IconChatBubbleOutline20 = () => (
+  <svg width={20} height={20} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M10 2.7c-4.03 0-7.3 3.27-7.3 7.3 0 1.32.35 2.56.96 3.63l-.83 3.02 3.1-.8A7.27 7.27 0 0 0 10 17.3c4.03 0 7.3-3.27 7.3-7.3S14.03 2.7 10 2.7Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M6.9 8.2h6.2M6.9 11.4h4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
 /** 错误提示图标：圆环 + 感叹号，颜色跟随 currentColor */
 export const IconToastError16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

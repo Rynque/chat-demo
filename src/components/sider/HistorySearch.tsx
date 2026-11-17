@@ -1,12 +1,20 @@
 import clsx from 'clsx'
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
 import { focusMessage } from '../../services/chat/focusMessage.js'
 import { searchHistory, type HistoryHit } from '../../services/chat/historySearch.js'
 import { selectSession, useChatStore } from '../../services/chat/store.js'
 import { useSettings, type Locale } from '../../services/settings.js'
-import { IconButton } from '../base/IconButton.js'
-import { IconArrowLeftOutline16, IconCloseFill14, IconSearchOutline16 } from '../base/icons.js'
+import { IconChatBubbleOutline20, IconCloseOutline16, IconSearchOutline16 } from '../base/icons.js'
 import { closeMobileSider } from './mobileSiderState.js'
 import styles from './HistorySearch.module.css'
 
@@ -15,24 +23,33 @@ const DEBOUNCE = 160
 
 type Status = 'idle' | 'searching' | 'done' | 'more' | 'error'
 
-/** 结果里的日期：同一年只写月日，跨年才带年份 */
-const formatHitDate = (at: number, locale: Locale) => {
+/** 结果时间：当天到分钟，同年到日期，跨年带年份 */
+const formatHitTime = (at: number, locale: Locale) => {
   const date = new Date(at)
-  if (locale !== 'zh-CN') {
-    return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  if (date.toDateString() === now.toDateString()) {
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}`
   }
-  const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`
-  return date.getFullYear() === new Date().getFullYear()
+  const monthDay =
+    locale === 'zh-CN'
+      ? `${date.getMonth() + 1}月${date.getDate()}日`
+      : `${date.getMonth() + 1}/${date.getDate()}`
+  return date.getFullYear() === now.getFullYear()
     ? monthDay
-    : `${date.getFullYear()}年${monthDay}`
+    : locale === 'zh-CN'
+      ? `${date.getFullYear()}年${monthDay}`
+      : `${monthDay}/${date.getFullYear()}`
 }
 
 const Highlight = ({
   text,
   ranges,
+  emphasis,
 }: {
   text: string
   ranges: readonly (readonly [number, number])[]
+  emphasis: 'title' | 'snippet'
 }) => {
   if (ranges.length === 0) {
     return text
@@ -44,9 +61,9 @@ const Highlight = ({
       parts.push(text.slice(cursor, start))
     }
     parts.push(
-      <mark key={index} className={styles.mark}>
+      <span key={index} className={emphasis === 'title' ? styles.markTitle : styles.markSnippet}>
         {text.slice(start, end)}
-      </mark>
+      </span>
     )
     cursor = end
   })
@@ -57,8 +74,8 @@ const Highlight = ({
 }
 
 /**
- * 历史对话搜索：和官网一致地在会话内容里找关键词，命中按时间倒序排列，
- * 点结果跳到对应消息；本地数据分批扫描，用「查找更早的消息」继续。
+ * 历史对话搜索：与官网一致的全屏遮罩 + 居中模态（移动端整页），
+ * 结果按时间倒序，点一条跳到对应消息。
  */
 export const HistorySearch = ({ onClose }: { onClose: () => void }) => {
   const t = useTranslate()
@@ -69,8 +86,7 @@ export const HistorySearch = ({ onClose }: { onClose: () => void }) => {
   const [scanned, setScanned] = useState(0)
   const [more, setMore] = useState(false)
   const [status, setStatus] = useState<Status>('idle')
-  /** -1 表示没有选中项：避免刚出结果就有一条看起来被选中 */
-  const [active, setActive] = useState(-1)
+  const [active, setActive] = useState(0)
   const [attempt, setAttempt] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -84,15 +100,12 @@ export const HistorySearch = ({ onClose }: { onClose: () => void }) => {
       setScanned(0)
       setMore(false)
       setStatus('idle')
-      setActive(-1)
+      setActive(0)
       return
     }
     const run = (runRef.current += 1)
-    setHits([])
-    setScanned(0)
-    setMore(false)
     setStatus('searching')
-    setActive(-1)
+    setActive(0)
     const timer = setTimeout(() => {
       void searchHistory(keyword, sessions)
         .then((page) => {
@@ -113,7 +126,7 @@ export const HistorySearch = ({ onClose }: { onClose: () => void }) => {
     return () => clearTimeout(timer)
   }, [keyword, sessions, attempt])
 
-  // 键盘上下选择时把条目带进可视区域
+  // 键盘选择时把条目带进可视区域
   useEffect(() => {
     listRef.current
       ?.querySelector<HTMLElement>('[data-active="true"]')
@@ -160,45 +173,45 @@ export const HistorySearch = ({ onClose }: { onClose: () => void }) => {
       }
       event.preventDefault()
       const step = event.key === 'ArrowDown' ? 1 : -1
-      setActive((current) =>
-        current < 0 ? (step > 0 ? 0 : hits.length - 1) : (current + step + hits.length) % hits.length
-      )
+      setActive((current) => (current + step + hits.length) % hits.length)
       return
     }
-    const target = hits[active < 0 ? 0 : active]
-    if (event.key === 'Enter' && target && !event.nativeEvent.isComposing) {
+    if (event.key === 'Enter' && hits[active] && !event.nativeEvent.isComposing) {
       event.preventDefault()
-      open(target)
+      open(hits[active])
       return
     }
     if (event.key === 'Escape') {
       event.preventDefault()
-      if (query) {
-        setQuery('')
-      } else {
-        onClose()
-      }
+      onClose()
     }
   }
 
-  const searching = status === 'searching'
-  return (
-    <div className={styles.view}>
-      <div className={styles.header}>
-        <IconButton
-          size="m"
-          tone="primary"
-          icon={<IconArrowLeftOutline16 />}
-          tooltip={t('historySearchClose')}
-          onClick={onClose}
-        />
-        <div className={styles.field}>
-          <span className={styles.fieldIcon} aria-hidden>
+  const listLabel = useMemo(() => t('historySearchResults'), [t])
+
+  return createPortal(
+    <div
+      className={styles.overlay}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose()
+        }
+      }}
+    >
+      <div
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('historySearchTrigger')}
+      >
+        <div className={styles.header}>
+          <span className={styles.headerIcon} aria-hidden>
             <IconSearchOutline16 />
           </span>
           <input
             ref={inputRef}
             className={styles.input}
+            role="searchbox"
             value={query}
             placeholder={t('historySearchPlaceholder')}
             aria-label={t('historySearchPlaceholder')}
@@ -208,96 +221,83 @@ export const HistorySearch = ({ onClose }: { onClose: () => void }) => {
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onKeyDown}
           />
-          {query ? (
+          <span className={styles.divider} aria-hidden />
+          <button type="button" className={styles.close} aria-label={t('close')} onClick={onClose}>
+            <IconCloseOutline16 />
+          </button>
+        </div>
+        <div ref={listRef} className={styles.body} role="listbox" aria-label={listLabel}>
+          {status === 'searching' ? (
+            <p className={styles.state} role="status">
+              <span className={styles.spinner} aria-hidden />
+              {t('historySearchSearching')}
+            </p>
+          ) : null}
+          {status === 'error' ? (
+            <p className={styles.state} role="alert">
+              {t('historySearchFailed')}
+              <button
+                type="button"
+                className={styles.stateAction}
+                onClick={() => setAttempt((value) => value + 1)}
+              >
+                {t('retry')}
+              </button>
+            </p>
+          ) : null}
+          {status === 'done' && hits.length === 0 ? (
+            <p className={styles.state}>
+              <IconSearchOutline16 />
+              {t('historySearchNoResult')}
+            </p>
+          ) : null}
+          {hits.map((hit, index) => (
             <button
+              key={hit.key}
               type="button"
-              className={styles.clear}
-              aria-label={t('historySearchClear')}
-              onClick={() => {
-                setQuery('')
-                inputRef.current?.focus()
-              }}
+              role="option"
+              aria-selected={index === active}
+              aria-posinset={index + 1}
+              aria-setsize={hits.length}
+              data-active={index === active}
+              className={clsx(styles.item, index === active && styles.active)}
+              onMouseEnter={() => setActive(index)}
+              onClick={() => open(hit)}
             >
-              <IconCloseFill14 />
+              <span className={styles.itemIcon} aria-hidden>
+                <IconChatBubbleOutline20 />
+              </span>
+              <span className={styles.itemMain}>
+                <span className={styles.itemTop}>
+                  <span className={styles.itemTitle}>
+                    <Highlight
+                      text={hit.sessionTitle || t('untitledChat')}
+                      ranges={hit.titleRanges}
+                      emphasis="title"
+                    />
+                  </span>
+                  <span className={styles.itemTime}>{formatHitTime(hit.at, locale)}</span>
+                </span>
+                <span className={styles.itemSnippet}>
+                  <Highlight text={hit.snippet} ranges={hit.snippetRanges} emphasis="snippet" />
+                </span>
+              </span>
+            </button>
+          ))}
+          {status === 'more' ? (
+            <p className={styles.state} role="status">
+              <span className={styles.spinner} aria-hidden />
+              {t('historySearchLoadingMore')}
+            </p>
+          ) : null}
+          {status === 'done' && more ? (
+            <button type="button" className={styles.more} onClick={loadMore}>
+              {t('historySearchEarlier')}
             </button>
           ) : null}
         </div>
       </div>
-      <div ref={listRef} className={styles.body}>
-        {status === 'idle' ? <p className={styles.tip}>{t('historySearchIdleHint')}</p> : null}
-        {searching ? (
-          <p className={styles.tip} role="status">
-            <span className={styles.spinner} aria-hidden />
-            {t('historySearchSearching')}
-          </p>
-        ) : null}
-        {status === 'error' ? (
-          <p className={styles.tip} role="alert">
-            {t('historySearchFailed')}
-            <button
-              type="button"
-              className={styles.retry}
-              onClick={() => setAttempt((value) => value + 1)}
-            >
-              {t('retry')}
-            </button>
-          </p>
-        ) : null}
-        {status === 'done' && hits.length === 0 ? (
-          <p className={styles.tip}>
-            {more ? (
-              <>
-                {t('historySearchNoResultRecently')}
-                <button type="button" className={styles.inlineMore} onClick={loadMore}>
-                  {t('historySearchEarlier')}
-                </button>
-              </>
-            ) : (
-              t('historySearchNoResult')
-            )}
-          </p>
-        ) : null}
-        {hits.length > 0 ? (
-          <div role="listbox" aria-label={t('historySearchResults')}>
-            {hits.map((hit, index) => (
-              <button
-                key={hit.key}
-                type="button"
-                role="option"
-                aria-selected={index === active}
-                data-active={index === active}
-                className={clsx(styles.hit, index === active && styles.active)}
-                onMouseEnter={() => setActive(index)}
-                onClick={() => open(hit)}
-              >
-                <span className={styles.hitTop}>
-                  <span className={styles.hitTitle}>
-                    <Highlight
-                      text={hit.sessionTitle || t('untitledChat')}
-                      ranges={hit.titleRanges}
-                    />
-                  </span>
-                  <span className={styles.hitDate}>{formatHitDate(hit.at, locale)}</span>
-                </span>
-                <span className={styles.hitSnippet}>
-                  <Highlight text={hit.snippet} ranges={hit.snippetRanges} />
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {status === 'more' ? (
-          <p className={styles.tip} role="status">
-            <span className={styles.spinner} aria-hidden />
-            {t('historySearchLoadingMore')}
-          </p>
-        ) : null}
-        {status === 'done' && more && hits.length > 0 ? (
-          <button type="button" className={styles.more} onClick={loadMore}>
-            {t('historySearchEarlier')}
-          </button>
-        ) : null}
-      </div>
-    </div>
+    </div>,
+    document.body
   )
 }

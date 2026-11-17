@@ -1,57 +1,65 @@
-/* 搜索视图占满侧边栏：顶部是返回与输入，下面滚动结果 */
-.view {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.header {
+/* 全屏遮罩与模态：尺寸、圆角、阴影对齐官网；颜色沿用项目令牌 */
+.overlay {
+  --overlay-opacity: 0.36;
+  position: fixed;
+  inset: 0;
+  z-index: 1025;
   display: flex;
   align-items: center;
-  flex-shrink: 0;
-  gap: 4px;
-  box-sizing: border-box;
-  height: 48px;
-  margin-bottom: 12px;
-  padding: 15px 0 10px;
-}
+  justify-content: center;
+  padding: 16px 0;
+  background-color: rgba(0, 0, 0, var(--overlay-opacity));
+  backdrop-filter: blur(2px);
 
-.field {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  gap: 6px;
-  box-sizing: border-box;
-  height: 34px;
-  padding: 0 6px 0 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background-color: var(--dsw-specific-input-major);
-
-  &:focus-within {
-    border-color: var(--dsw-alias-brand-primary);
+  [data-ds-dark-theme] & {
+    --overlay-opacity: 0.6;
   }
 }
 
-.fieldIcon {
+.dialog {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 660px;
+  max-width: calc(100vw - 32px);
+  height: 654px;
+  max-height: calc(100dvh - 32px);
+  border-radius: 20px;
+  background-color: var(--dsw-alias-bg-layer-2);
+  box-shadow:
+    0 2px 4px 0 rgba(0, 0, 0, 0.04),
+    0 4px 10px 0 rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+/* 头部：搜索图标 + 输入 + 分隔线 + 关闭，行高 60px */
+.header {
   display: flex;
   flex-shrink: 0;
-  color: var(--dsw-alias-label-caption);
+  align-items: center;
+  box-sizing: border-box;
+  height: 60px;
+  gap: 8px;
+  padding: 12px 12px 12px 8px;
+}
+
+.headerIcon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-primary);
 }
 
 .input {
   flex: 1;
   min-width: 0;
-  height: 100%;
+  height: 24px;
   padding: 0;
   border: none;
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 16px;
+  line-height: 24px;
   outline: none;
 
   &::placeholder {
@@ -59,61 +67,168 @@
   }
 }
 
-.clear {
+.divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 20px;
+  background-color: var(--dsw-alias-border-l2);
+}
+
+.close {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   border-radius: 50%;
-  color: var(--dsw-alias-label-caption);
-  background-color: var(--dsw-alias-bg-skeleton);
+  background: none;
+  color: var(--dsw-alias-label-primary);
   cursor: pointer;
+  outline: none;
+  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
 
   svg {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
   }
 
-  &:hover {
-    color: var(--dsw-alias-label-primary);
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--dsw-alias-interactive-bg-hover);
+    }
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
   }
 }
 
+/* 结果区：8px 内边距，条目自身 16px 圆角 */
 .body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
-  margin: 0 -2px;
-  padding: 0 2px;
+  padding: 8px;
   overflow-y: auto;
   scrollbar-color: var(--scroll-color) transparent;
 }
 
-.tip {
+.item {
   display: flex;
-  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: flex-start;
+  box-sizing: border-box;
+  width: 100%;
+  gap: 12px;
+  padding: 10px 12px 10px 10px;
+  border: none;
+  border-radius: 16px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+
+  &.active {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+
+  &:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--dsw-alias-button-primary-fill);
+  }
+}
+
+.itemIcon {
+  display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  margin: 0;
-  padding: 28px 12px;
+  width: 40px;
+  height: 40px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.itemMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.itemTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.itemTitle {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 25px;
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.itemTime {
+  flex-shrink: 0;
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.itemSnippet {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 命中词只加粗、并用主文字色，与官网一致 */
+.markTitle {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.markSnippet {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+/* 空态、加载、失败：在结果区垂直居中 */
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: auto;
+  padding: 24px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
   text-align: center;
 }
 
-/* 没有命中但还有更早的会话：「暂未找到结果，查找更早的消息」里的链接 */
-.inlineMore {
+.stateAction {
   padding: 0;
   border: none;
   background: none;
   color: var(--dsw-alias-brand-text);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 
   &:hover {
@@ -123,8 +238,8 @@
 
 .spinner {
   box-sizing: border-box;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 2px solid var(--dsw-alias-border-l2);
   border-top-color: var(--dsw-alias-label-tertiary);
@@ -137,93 +252,10 @@
   }
 }
 
-.retry {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--dsw-alias-brand-text);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-/* 单条结果：标题与日期一行，摘要两行截断，命中词加粗为品牌色 */
-.hit {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  box-sizing: border-box;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 12px;
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  outline: none;
-
-  & + & {
-    margin-top: 2px;
-  }
-
-  &:hover,
-  &.active {
-    background-color: var(--dsw-specific-sidebar-nav-item-hover);
-  }
-
-  &:focus-visible {
-    box-shadow: inset 0 0 0 2px var(--dsw-alias-button-primary-fill);
-  }
-}
-
-.hitTop {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.hitTitle {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.hitDate {
-  flex-shrink: 0;
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--dsw-alias-label-caption);
-  font-variant-numeric: tabular-nums;
-}
-
-.hitSnippet {
-  display: -webkit-box;
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-tertiary);
-  word-break: break-word;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.mark {
-  color: var(--dsw-alias-brand-text);
-  font-weight: 600;
-  background: none;
-}
-
 .more {
-  display: block;
+  flex-shrink: 0;
   width: 100%;
-  margin: 4px 0 12px;
+  margin: 4px 0;
   padding: 8px;
   border: none;
   border-radius: 12px;
@@ -234,29 +266,49 @@
   cursor: pointer;
 
   &:hover {
-    background-color: var(--dsw-specific-sidebar-nav-item-hover);
+    background-color: var(--dsw-alias-interactive-bg-hover);
   }
 }
 
-/* 移动端抽屉里字号至少 16px，避免从输入框聚焦时页面被放大 */
+/* 移动端：整页搜索，头部 52px，条目字号放大 */
 @media not all and (min-width: 768px) {
-  .input {
+  .overlay {
+    padding: 0;
+  }
+
+  .dialog {
+    width: 100%;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .header {
+    height: 52px;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+
+  .item {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .itemTitle {
     font-size: 16px;
+    line-height: 24px;
   }
 
-  .hit {
-    padding: 10px 12px;
-    border-radius: 16px;
-  }
-
-  .hitTitle {
-    font-size: 16px;
-    line-height: 22px;
-  }
-
-  .hitSnippet {
+  .itemSnippet {
     font-size: 13px;
     line-height: 20px;
+  }
+
+  .state svg {
+    width: 24px;
+    height: 24px;
   }
 }
 

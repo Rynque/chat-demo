@@ -70,62 +70,56 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
 
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
-      {searching ? (
-        <HistorySearch onClose={() => setSearching(false)} />
-      ) : (
-        <>
-          <div className={styles.top}>
-            <div className={styles.appName}>{t('appName')}</div>
-            <div className={styles.topActions}>
-              <IconButton
-                size="m"
-                tone="primary"
-                icon={<IconSearchOutline16 />}
-                tooltip={t('historySearchTrigger')}
-                tooltipPlacement="bottom"
-                onClick={() => setSearching(true)}
-              />
-              <IconButton
-                size="m"
-                icon={<IconPanelLeftOutline16 />}
-                tooltip={t('collapseSiderbarButton')}
-                tooltipPlacement="bottom"
-                onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
-              />
-            </div>
-          </div>
-          <button
-            type="button"
-            className={styles.newChat}
-            onClick={() => {
-              newChat()
-              closeMobileSider()
-            }}
-          >
-            <span className={styles.newChatIcon}>
-              <NewChatIcon />
-            </span>
-            {t('newChat')}
-          </button>
-          <div className={styles.listWrap}>
-            <div className={styles.list}>
-              {groups.map((group) => (
-                <div key={group.key} className={styles.section}>
-                  <div className={styles.sectionHeader}>{group.label}</div>
-                  {group.sessions.map((session) => (
-                    <SessionItem
-                      key={session.id}
-                      session={session}
-                      active={session.id === activeId}
-                      onDelete={() => setDeleting(session)}
-                    />
-                  ))}
-                </div>
+      <div className={styles.top}>
+        <div className={styles.appName}>{t('appName')}</div>
+        <div className={styles.topActions}>
+          <IconButton
+            size="m"
+            tone="primary"
+            icon={<IconSearchOutline16 />}
+            tooltip={t('historySearchTrigger')}
+            tooltipPlacement="bottom"
+            onClick={() => setSearching(true)}
+          />
+          <IconButton
+            size="m"
+            icon={<IconPanelLeftOutline16 />}
+            tooltip={t('collapseSiderbarButton')}
+            tooltipPlacement="bottom"
+            onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
+          />
+        </div>
+      </div>
+      <button
+        type="button"
+        className={styles.newChat}
+        onClick={() => {
+          newChat()
+          closeMobileSider()
+        }}
+      >
+        <span className={styles.newChatIcon}>
+          <NewChatIcon />
+        </span>
+        {t('newChat')}
+      </button>
+      <div className={styles.listWrap}>
+        <div className={styles.list}>
+          {groups.map((group) => (
+            <div key={group.key} className={styles.section}>
+              <div className={styles.sectionHeader}>{group.label}</div>
+              {group.sessions.map((session) => (
+                <SessionItem
+                  key={session.id}
+                  session={session}
+                  active={session.id === activeId}
+                  onDelete={() => setDeleting(session)}
+                />
               ))}
             </div>
-          </div>
-        </>
-      )}
+          ))}
+        </div>
+      </div>
       <div className={styles.bottom}>
         <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
           <span className={styles.settingsIcon}>
@@ -171,6 +165,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           {t('deleteSessionWithFilesDescription')}
         </Modal>
       ) : null}
+      {searching ? <HistorySearch onClose={() => setSearching(false)} /> : null}
     </div>
   )
 }
