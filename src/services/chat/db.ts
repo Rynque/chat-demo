@@ -145,9 +145,12 @@ export const renameSession = async (id: string, title: string): Promise<void> =>
   ])
 }
 
-/** 删除会话，仅清理已无会话引用的本地原件；远端文件不删。 */
+/** 删除会话，仅清理已无会话引用的本地原件；远端文件不删。虚拟文件随会话一起删除。 */
 export const deleteSession = async (sessionId: string): Promise<void> => {
-  const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')
+  const tx = (await getDB()).transaction(
+    ['sessions', 'sessionSummaries', 'files', 'vfs'],
+    'readwrite'
+  )
   await Promise.all([
     (async () => {
       try {
@@ -159,6 +162,10 @@ export const deleteSession = async (sessionId: string): Promise<void> => {
           if ((await summaries.index('fileIds').count(id)) === 0) {
             await tx.objectStore('files').delete(id)
           }
+        }
+        const vfs = tx.objectStore('vfs')
+        for (const key of await vfs.index('sessionId').getAllKeys(sessionId)) {
+          await vfs.delete(key)
         }
       } catch (error) {
         abortTransaction(tx)
@@ -232,7 +239,7 @@ export const updateStagingFileTypes = async (types: ReadonlyMap<string, string>)
 export const commitStaging = async (): Promise<SessionSummary[]> => {
   const summaries: SessionSummary[] = []
   const tx = (await getDB()).transaction(
-    ['sessions', 'sessionSummaries', 'files', 'sessionsStaging', 'filesStaging'],
+    ['sessions', 'sessionSummaries', 'files', 'vfs', 'sessionsStaging', 'filesStaging'],
     'readwrite'
   )
   const move = async (from: 'sessionsStaging' | 'filesStaging', to: 'sessions' | 'files') => {
@@ -241,6 +248,8 @@ export const commitStaging = async (): Promise<SessionSummary[]> => {
       await target.clear()
       if (to === 'sessions') {
         await tx.objectStore('sessionSummaries').clear()
+        // 导入会替换全部会话，旧的虚拟文件没有归属，一并清掉
+        await tx.objectStore('vfs').clear()
       }
       for (
         let cursor = await tx.objectStore(from).openCursor();
