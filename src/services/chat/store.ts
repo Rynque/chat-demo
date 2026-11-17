@@ -962,23 +962,40 @@ const pendingToolCalls = (reply: AssistantMessage): ToolCallPart[] => {
 const runToolCalls = async (sessionId: string, reply: AssistantMessage, signal: AbortSignal) => {
   const calls = pendingToolCalls(reply)
   const apiKey = useSettings.getState().apiKey ?? ''
-  const outcomes = await Promise.all(
-    calls.map(async (call) => {
+  // 模型可能对同一次检索发出多个参数完全相同的调用；按「工具名 + 参数」去重，只执行一次。
+  const fingerprint = (call: ToolCallPart) => `${call.name}:${JSON.stringify(call.input)}`
+  const unique = new Map<string, ToolCallPart>()
+  for (const call of calls) {
+    if (!unique.has(fingerprint(call))) {
+      unique.set(fingerprint(call), call)
+    }
+  }
+  const executed = await Promise.all(
+    [...unique.entries()].map(async ([key, call]) => {
       try {
         const outcome = await runTool(call.name, call.input, { apiKey, sessionId, signal })
-        return { call, content: outcome.content, data: outcome.data, ok: true }
+        return { key, content: outcome.content, data: outcome.data, ok: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        return { call, content: `工具执行失败：${message}`, data: undefined, ok: false }
+        return { key, content: `工具执行失败：${message}`, data: undefined, ok: false }
       }
     })
   )
-  const failed = new Set(outcomes.filter((item) => !item.ok).map((item) => item.call.id))
-  const results: ToolResultPart[] = outcomes.map((item) => ({
+  const byKey = new Map(executed.map((item) => [item.key, item]))
+  const settled = calls.map((call) => ({
+    call,
+    outcome: byKey.get(fingerprint(call)) ?? {
+      content: '工具执行失败：结果缺失',
+      data: undefined,
+      ok: false,
+    },
+  }))
+  const failed = new Set(settled.filter((item) => !item.outcome.ok).map((item) => item.call.id))
+  const results: ToolResultPart[] = settled.map(({ call, outcome }) => ({
     type: 'tool_result',
-    tool_use_id: item.call.id,
-    content: item.content,
-    ...(item.data ? { data: item.data } : {}),
+    tool_use_id: call.id,
+    content: outcome.content,
+    ...(outcome.data ? { data: outcome.data } : {}),
   }))
   const next: AssistantMessage = {
     ...reply,

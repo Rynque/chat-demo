@@ -211,6 +211,8 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   const searchResults: Source[] = []
   const steps: Step[] = []
   const mergedSearch = new Map<ServerToolKind, SearchStep>()
+  /** 已展示过的客户端工具调用指纹，用于合并同名同参的重复调用 */
+  const seenCalls = new Set<string>()
   let mergedThinking: ThinkingStep | null = null
   let pendingText: { index: number; text: string; citations?: TextCitation[] }[] = []
 
@@ -255,6 +257,12 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
       return
     }
     if (block.type === 'tool_use') {
+      // 同名同参的重复调用只展示一次（执行侧也已去重）
+      const fingerprint = `${block.name}:${JSON.stringify(block.input)}`
+      if (seenCalls.has(fingerprint)) {
+        return
+      }
+      seenCalls.add(fingerprint)
       const result = toolResults.get(block.id)
       const status: ToolStatus = !result
         ? streaming
