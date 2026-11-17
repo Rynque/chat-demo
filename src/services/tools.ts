@@ -330,22 +330,22 @@ const runJsTool: Tool = {
         written[path] = content
       }
     }
-    // 一个下拉里按块展示：代码块带 stdout 输出（换行 + > 前缀），再是返回值与写入的文件
-    const out = result.stdout.trimEnd()
+    // 一个下拉里按块展示：执行命令（$ 命令 + > 返回值）与运行产生的文件
     const budget = { left: MAX_PREVIEW_TOTAL }
-    const script = previewSection('运行脚本', code.trimEnd(), { command: true, budget })
-    const stdout = out ? previewSection('stdout', out, { budget }) : null
+    const script = previewSection('执行命令', code.trimEnd(), { command: true, budget })
+    // > 后面是返回值；脚本没有返回值时退回显示 stdout，避免丢失输出
+    const returned = result.value !== undefined ? result.value : result.stdout.trimEnd()
+    const output = returned ? previewSection('输出', returned, { budget }) : null
     const sections: ToolSection[] = []
     if (script) {
       sections.push({
         ...script,
-        ...(stdout ? { output: stdout.content } : {}),
-        ...(stdout?.truncated ? { truncated: true } : {}),
+        ...(output ? { output: output.content } : {}),
+        ...(output?.truncated ? { truncated: true } : {}),
       })
     }
     for (const item of [
       ...(result.stderr ? [{ label: '错误输出', content: result.stderr.trimEnd() }] : []),
-      ...(result.value !== undefined ? [{ label: '返回值', content: result.value }] : []),
       ...Object.entries(written).map(([path, content]) => ({
         label: `运行文件：${path}`,
         content,
