@@ -1,7 +1,7 @@
 /**
  * Messages API（Anthropic 兼容格式）协议类型，只取本应用用到的部分。
  * 文档：https://api-docs.deepseek.com/zh-cn/api/create-message
- * 声明 deepseek_web_search / deepseek_read_url 或设置 safety_check.level 为 high 时进入扩展模式。
+ * 请求只用客户端工具（web_search / fetch_url）触发联网；声明服务端工具或 safety_check.level 为 high 时才会进入扩展模式。
  */
 
 export type ChatModel = 'deepseek-flash' | 'deepseek-v4-pro'
@@ -119,11 +119,34 @@ export type ServerToolBlock =
   | WebFetchToolResultBlock
 
 /** 用于识别客户端工具调用的内容块类型 */
-export type ToolUseBlock = { type: 'tool_use'; id: string; name: string; input: unknown }
+export type ToolUseBlock = {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
 
 // ---------- 请求 ----------
 
 export type TextBlockParam = { type: 'text'; text: string }
+
+/** 客户端工具：不传 type，只声明名称、说明与参数 schema */
+export type ClientToolDeclaration = {
+  name: string
+  description: string
+  input_schema: {
+    type: 'object'
+    properties: Record<string, unknown>
+    required?: string[]
+  }
+}
+
+/** 工具执行结果：与 tool_use 按 id 对应，同一个 user 消息里要排在文本之前 */
+export type ToolResultBlockParam = {
+  type: 'tool_result'
+  tool_use_id: string
+  content: string
+}
 
 /**
  * 文件块：引用经 Files API 上传的文件，图片用 image、其余用 document；
@@ -152,32 +175,22 @@ export type AssistantBlockParam =
   | ServerToolUseBlockParam
   | WebSearchToolResultBlockParam
   | WebFetchToolResultBlockParam
+  | ToolUseBlock
 
 /** 末尾 assistant 自动触发继续生成，无需 prefix 字段 */
 export type MessageParam =
   /** Chat Engine 扩展角色，位于对应 user 前；需服务端支持 latest_reminder。 */
   | { role: 'latest_reminder'; content: string }
-  | { role: 'user'; content: string | (FileBlockParam | TextBlockParam)[] }
+  | { role: 'user'; content: string | (FileBlockParam | TextBlockParam | ToolResultBlockParam)[] }
   | { role: 'assistant'; content: AssistantBlockParam[] }
 
-/** 开启联网搜索与边想边搜 */
-export type DeepseekWebSearchTool = {
-  type: 'deepseek_web_search'
-  name: 'deepseek_web_search'
-}
-
-/** 阅读本轮用户消息中的链接，与搜索工具独立声明 */
-export type DeepseekReadUrlTool = {
-  type: 'deepseek_read_url'
-  name: 'deepseek_read_url'
-}
-
+/** 客户端工具由本地执行，声明里不带 type；空数组等同于不提供工具 */
 export type CreateMessageRequest = {
   model: ChatModel
   system: string
   messages: MessageParam[]
   thinking: { type: 'enabled' | 'disabled' }
-  tools: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
+  tools: ClientToolDeclaration[]
   safety_check: { level: 'high' }
   title?: { enabled: boolean }
 }

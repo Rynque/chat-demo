@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage } from '../api/client.js'
-import type { ChatModel, CreateMessageRequest } from '../api/types.js'
+import type { ChatModel } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { useSettings } from '../settings.js'
@@ -20,6 +20,7 @@ import {
   canContinueReply,
   getContextRounds,
   settleReply,
+  toReplyMessages,
   toRequestMessages,
 } from './reply.js'
 import {
@@ -29,8 +30,11 @@ import {
   type Message,
   type Session,
   type SessionSummary,
+  type ToolCallPart,
+  type ToolResultPart,
   type UserMessage,
 } from './types.js'
+import { runTool, TOOL_DECLARATIONS } from '../tools.js'
 
 /** deepseek-flash 同时支持深度思考与图片输入 */
 const MODEL: ChatModel = 'deepseek-flash'
@@ -45,16 +49,8 @@ const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
 
-/** 阅读链接始终开启，智能搜索开关控制是否另行声明搜索工具（含边想边搜）。 */
-const serverTools = (search: boolean): CreateMessageRequest['tools'] => {
-  const tools: CreateMessageRequest['tools'] = [
-    { type: 'deepseek_read_url', name: 'deepseek_read_url' },
-  ]
-  if (search) {
-    tools.push({ type: 'deepseek_web_search', name: 'deepseek_web_search' })
-  }
-  return tools
-}
+/** 智能搜索开关控制是否声明联网工具；关闭时本轮没有任何工具，也不会有隐式读链接 */
+const toolsFor = (search: boolean) => (search ? TOOL_DECLARATIONS : [])
 
 /** 允许自动补标题的请求；手动重命名后取消本轮标题写入，包含主动清空标题的情况。 */
 const titleRequests = new Set<AbortController>()
@@ -253,7 +249,7 @@ export const bindChatPersistence = () => {
   }
 }
 
-/** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
+/** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制是否声明联网工具。 */
 const createReply = (): AssistantMessage => {
   const { thinking, search } = useSettings.getState()
   return {
@@ -954,8 +950,60 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
     signal.addEventListener('abort', onAbort, { once: true })
   })
 
+/** 一条回复里最多几轮工具往返，避免模型反复检索 */
+const MAX_TOOL_ROUNDS = 4
+
+/** 还没拿到结果的客户端工具调用 */
+const pendingToolCalls = (reply: AssistantMessage): ToolCallPart[] => {
+  const settled = new Set(
+    reply.blocks.flatMap((block) => (block.type === 'tool_result' ? [block.tool_use_id] : []))
+  )
+  return reply.blocks.filter(
+    (block): block is ToolCallPart => block.type === 'tool_use' && !settled.has(block.id)
+  )
+}
+
+/** 本地执行工具：结果按调用顺序追加，失败也作为结果交给模型自己决定下一步 */
+const runToolCalls = async (sessionId: string, reply: AssistantMessage, signal: AbortSignal) => {
+  const calls = pendingToolCalls(reply)
+  const apiKey = useSettings.getState().apiKey ?? ''
+  const outcomes = await Promise.all(
+    calls.map(async (call) => {
+      try {
+        const outcome = await runTool(call.name, call.input, { apiKey, signal })
+        return { call, content: outcome.content, data: outcome.data, ok: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return { call, content: `工具执行失败：${message}`, data: undefined, ok: false }
+      }
+    })
+  )
+  const failed = new Set(outcomes.filter((item) => !item.ok).map((item) => item.call.id))
+  const results: ToolResultPart[] = outcomes.map((item) => ({
+    type: 'tool_result',
+    tool_use_id: item.call.id,
+    content: item.content,
+    ...(item.data ? { data: item.data } : {}),
+  }))
+  const next: AssistantMessage = {
+    ...reply,
+    blocks: [
+      ...reply.blocks.map((block) =>
+        block.type !== 'tool_use'
+          ? block
+          : { ...block, status: failed.has(block.id) ? ('error' as const) : ('done' as const) }
+      ),
+      ...results,
+    ],
+  }
+  updateReply(sessionId, next)
+  persist(sessionId)
+  return next
+}
+
 /**
  * 请求并消费流：先补齐附件的 serverId，再发请求；流式增量按动画帧刷新内存，完成、失败或停止后落盘。
+ * 回复停在客户端工具调用上时本地执行工具、回传结果并继续下一轮，最多 MAX_TOOL_ROUNDS 轮。
  * 补传失败时回复记为 upload 错误，可重试。
  * 服务端判定 file_id 失效时重新补传后重发，退避重试且次数有上限，超过则按原始报错收尾。
  */
@@ -975,107 +1023,134 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   streamFlushes.set(sessionId, flush)
 
   try {
-    for (let attempt = 0; ; attempt += 1) {
-      /** 附件补齐前出错属于上传失败，请求还没有发出 */
-      let preparing = true
-      let receivedContent = false
-      try {
-        const prepared = await prepareFiles(sessionId, request, controller.signal)
-        preparing = false
-        // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
-        const latestReminder = prepared.prefix
-          ? prepared.prefix.latestReminder
-          : createLatestReminder(useSettings.getState())
-        reply = { ...reply, latestReminder }
-        updateReply(sessionId, reply)
-        persist(sessionId)
-        const messages = toRequestMessages(
-          prepared.history,
-          prepared.question,
-          prepared.prefix,
-          initial.thinking ?? false,
-          latestReminder
-        )
-        const events = streamMessage(
-          useSettings.getState().apiKey ?? '',
-          {
-            model: initial.model ?? MODEL,
-            system: SYSTEM_PROMPT,
-            messages,
-            thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-            safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false),
-            ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
-          },
-          controller.signal
-        )
-        const blockIndexes = new Map<number, number>()
-        for await (const event of events) {
-          receivedContent ||= event.type === 'content_block_start'
-          if (
-            event.type === 'message_delta' &&
-            (event.delta.stop_reason === 'end_turn' || event.delta.stop_reason === 'max_tokens') &&
-            event.delta.title?.trim() &&
-            titleRequests.has(controller) &&
-            !controller.signal.aborted &&
-            !get().importingHistory
-          ) {
-            const title = event.delta.title.trim()
-            updateSession(sessionId, (session) => (session.title ? session : { ...session, title }))
-            titleRequests.delete(controller)
+    for (let round = 0; ; round += 1) {
+      /** 这一轮是否收到了正常的 message_stop */
+      let complete = false
+      for (let attempt = 0; ; attempt += 1) {
+        /** 附件补齐前出错属于上传失败，请求还没有发出 */
+        let preparing = true
+        let receivedContent = false
+        try {
+          const prepared = await prepareFiles(sessionId, request, controller.signal)
+          preparing = false
+          // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
+          const latestReminder = prepared.prefix
+            ? prepared.prefix.latestReminder
+            : createLatestReminder(useSettings.getState())
+          reply = { ...reply, latestReminder }
+          updateReply(sessionId, reply)
+          persist(sessionId)
+          const base = toRequestMessages(
+            prepared.history,
+            prepared.question,
+            prepared.prefix,
+            latestReminder
+          )
+          // 工具续轮：把已产生的 assistant / tool_result 段接在本轮提问之后
+          const messages = round === 0 ? base : [...base, ...toReplyMessages(reply)]
+          const events = streamMessage(
+            useSettings.getState().apiKey ?? '',
+            {
+              model: initial.model ?? MODEL,
+              system: SYSTEM_PROMPT,
+              messages,
+              thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
+              safety_check: SAFETY_CHECK,
+              tools: toolsFor(initial.search ?? false),
+              ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
+            },
+            controller.signal
+          )
+          const blockIndexes = new Map<number, number>()
+          const inputs = new Map<number, string>()
+          for await (const event of events) {
+            receivedContent ||= event.type === 'content_block_start'
+            if (
+              event.type === 'message_delta' &&
+              (event.delta.stop_reason === 'end_turn' ||
+                event.delta.stop_reason === 'max_tokens') &&
+              event.delta.title?.trim() &&
+              titleRequests.has(controller) &&
+              !controller.signal.aborted &&
+              !get().importingHistory
+            ) {
+              const title = event.delta.title.trim()
+              updateSession(sessionId, (session) =>
+                session.title ? session : { ...session, title }
+              )
+              titleRequests.delete(controller)
+            }
+            reply = applyEvent(reply, event, Date.now(), blockIndexes, inputs)
+            if (document.visibilityState === 'hidden') {
+              flush()
+            } else {
+              frame ||= requestAnimationFrame(flush)
+            }
           }
-          reply = applyEvent(reply, event, Date.now(), blockIndexes)
-          if (document.visibilityState === 'hidden') {
-            flush()
-          } else {
-            frame ||= requestAnimationFrame(flush)
-          }
-        }
-        reply = settleReply(reply, 'done', Date.now())
-        break
-      } catch (error) {
-        if (controller.signal.aborted) {
-          reply = settleReply(reply, 'stopped', Date.now())
+          reply = settleReply(reply, 'done', Date.now())
+          complete = true
           break
-        }
-        if (preparing) {
-          reply = settleReply(reply, 'error', Date.now(), {
-            kind: 'upload',
-            message: '',
-            localMessage: describeUploadError(error),
-            retryable: isRetryableApiError(error),
-          })
-          break
-        }
-        // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
-        if (
-          attempt < FILE_RETRY_LIMIT &&
-          !receivedContent &&
-          reuploadInvalidatedFiles(sessionId, request, error)
-        ) {
-          await waitForRetry(attempt, controller.signal)
+        } catch (error) {
           if (controller.signal.aborted) {
             reply = settleReply(reply, 'stopped', Date.now())
             break
           }
-          continue
+          if (preparing) {
+            reply = settleReply(reply, 'error', Date.now(), {
+              kind: 'upload',
+              message: '',
+              localMessage: describeUploadError(error),
+              retryable: isRetryableApiError(error),
+            })
+            break
+          }
+          // 附件失效：重新补传后重发。收到过内容块后不自动重发。
+          if (
+            attempt < FILE_RETRY_LIMIT &&
+            !receivedContent &&
+            reuploadInvalidatedFiles(sessionId, request, error)
+          ) {
+            await waitForRetry(attempt, controller.signal)
+            if (controller.signal.aborted) {
+              reply = settleReply(reply, 'stopped', Date.now())
+              break
+            }
+            continue
+          }
+          if (error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason) {
+            // 已收到 message_delta 的结束原因，只是缺了结尾的 message_stop
+            reply = settleReply(reply, 'done', Date.now())
+          } else if (error instanceof ApiError) {
+            reply = settleReply(reply, 'error', Date.now(), {
+              kind: error.kind,
+              message: error.message,
+              status: error.status,
+              localMessage: error.localMessage,
+            })
+          } else {
+            reply = settleReply(reply, 'error', Date.now(), {
+              kind: 'protocol',
+              message: error instanceof Error ? error.message : String(error),
+            })
+          }
+          break
         }
-        if (error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason) {
-          // 已收到 message_delta 的结束原因，只是缺了结尾的 message_stop
-          reply = settleReply(reply, 'done', Date.now())
-        } else if (error instanceof ApiError) {
-          reply = settleReply(reply, 'error', Date.now(), {
-            kind: error.kind,
-            message: error.message,
-            status: error.status,
-            localMessage: error.localMessage,
-          })
-        } else {
-          reply = settleReply(reply, 'error', Date.now(), {
-            kind: 'protocol',
-            message: error instanceof Error ? error.message : String(error),
-          })
-        }
+      }
+      // 只有完整结束、且停在客户端工具调用上才继续
+      if (!complete || reply.stopReason !== 'tool_use') {
+        break
+      }
+      if (pendingToolCalls(reply).length === 0) {
+        break
+      }
+      if (round >= MAX_TOOL_ROUNDS) {
+        reply = settleReply(reply, 'stopped', Date.now())
+        break
+      }
+      reply = await runToolCalls(sessionId, reply, controller.signal)
+      flush()
+      if (controller.signal.aborted) {
+        reply = settleReply(reply, 'stopped', Date.now())
         break
       }
     }

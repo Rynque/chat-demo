@@ -6,7 +6,7 @@ import type {
   WebSearchResult,
   WebSearchToolResultBlock,
 } from '../api/types.js'
-import type { AssistantMessage, ThinkingPart } from './types.js'
+import type { AssistantMessage, ThinkingPart, ToolResultPart } from './types.js'
 
 /**
  * 由回复的内容块推导界面需要的结构：思考与工具步骤的时间线、带引用角标的正文、可引用的来源列表。
@@ -175,9 +175,12 @@ const joinTextBlocks = (
 
 export const buildReplyView = (reply: AssistantMessage, streaming: boolean): ReplyView => {
   const results = new Map<string, WebSearchToolResultBlock | WebFetchToolResultBlock>()
+  const toolResults = new Map<string, ToolResultPart>()
   for (const block of reply.blocks) {
     if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
       results.set(block.tool_use_id, block)
+    } else if (block.type === 'tool_result') {
+      toolResults.set(block.tool_use_id, block)
     }
   }
 
@@ -226,6 +229,52 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   reply.blocks.forEach((block, index) => {
     // 模板统一由 describeReply 展示，不能混入模型正文或工具步骤前的说明文字。
     if (block.type === 'text' && block.isTemplate) {
+      return
+    }
+    if (block.type === 'tool_use') {
+      const result = toolResults.get(block.id)
+      const status: ToolStatus = !result
+        ? streaming
+          ? 'wip'
+          : 'failed'
+        : block.status === 'error'
+          ? 'failed'
+          : 'done'
+      flushPreamble()
+      const data = result?.data
+      if (data?.kind === 'search') {
+        const found = data.results.map((item) =>
+          registry.add(item.url, item.title, item.publishedAt, {
+            snippet: item.snippet,
+            site_icon: item.siteIcon,
+            site_name: item.siteName,
+          })
+        )
+        for (const source of found) {
+          if (!searchResults.includes(source)) {
+            searchResults.push(source)
+          }
+        }
+        steps.push({
+          type: 'search',
+          key: block.id,
+          kind: 'search',
+          queries: [data.query],
+          results: found,
+          status,
+        })
+      } else {
+        // 抓取网页：进行中先显示目标地址，完成后换成页面标题
+        const url = data?.kind === 'fetch' ? data.url : String(block.input.url ?? '')
+        const title = data?.kind === 'fetch' ? data.title : url
+        const page: PageItem = { id: block.id, url, title, status }
+        const last = steps.at(-1)
+        if (last?.type === 'open') {
+          last.pages.push(page)
+        } else {
+          steps.push({ type: 'open', pages: [page] })
+        }
+      }
       return
     }
     if (block.type !== 'thinking') {

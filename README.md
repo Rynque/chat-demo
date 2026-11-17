@@ -55,7 +55,7 @@ Settings → Data → Delete all chats clears all local conversations, original 
 
 [rspack.config.ts](rspack.config.ts) uses `https://api.deepseek.com` by default. Use `createConfig({ apiOrigin, devServer })` to customize the API origin and development server proxy.
 
-Chat uses `deepseek-flash` by default through Anthropic-compatible Messages / Files APIs. Speech features use ASR / TTS endpoints. Requests include extensions for search, link reading, titles, and `latest_reminder`, so the configured service must support the corresponding capabilities. Supported attachment formats are determined by server-side validation.
+Chat uses `deepseek-flash` by default through Anthropic-compatible Messages / Files APIs. Speech features use ASR / TTS endpoints. Web search and page fetching are declared as client tools (`web_search` / `fetch_url`): the browser calls `/v1/tools/search` and `/v1/tools/fetch`, then returns `tool_result` blocks so the model can continue. Requests also use extensions for titles and `latest_reminder`, so the configured service must support the corresponding capabilities. Supported attachment formats are determined by server-side validation.
 
 ```text
 src/

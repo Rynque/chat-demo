@@ -63,7 +63,39 @@ export type TextPart = {
 }
 
 /** 服务端工具调用与结果块按协议原样保存；历史请求只回传 read_link 调用与结果 */
-export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock
+export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock | ToolCallPart | ToolResultPart
+
+/** 客户端工具调用：模型要求本地执行，input 由 input_json_delta 累积后解析 */
+export type ToolCallPart = {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: Record<string, unknown>
+  /** 仅界面用；请求时不发送 */
+  status?: 'running' | 'done' | 'error'
+}
+
+/** 本地执行结果：请求时转成 tool_result 块，content 是交给模型的文本 */
+export type ToolResultPart = {
+  type: 'tool_result'
+  tool_use_id: string
+  content: string
+  /** 仅界面用；请求时不发送 */
+  data?: ToolCallData
+}
+
+export type ToolSource = {
+  url: string
+  title: string
+  snippet: string
+  siteName: string | null
+  siteIcon: string | null
+  publishedAt: string | null
+}
+
+export type ToolCallData =
+  | { kind: 'search'; query: string; results: ToolSource[] }
+  | { kind: 'fetch'; url: string; title: string; excerpt: string }
 
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；
@@ -79,7 +111,7 @@ export type AssistantMessage = MessageBranch & {
   model: ChatModel | null
   /** 请求时是否开启深度思考 */
   thinking?: boolean
-  /** 请求时是否声明 deepseek_web_search；关闭时仍声明 deepseek_read_url */
+  /** 请求时是否声明本地联网工具；关闭时本轮不带任何工具 */
   search?: boolean
   /** 本轮请求的系统信息快照；各回答版本独立保存，续写沿用。历史消息中缺省的快照保持为空。 */
   latestReminder?: string
