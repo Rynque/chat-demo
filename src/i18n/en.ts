@@ -151,8 +151,6 @@ export const en = {
   chatInputPlaceholderChat: 'Enter a message',
   deactivatedThinkTooltip: 'Think before responding to solve reasoning problems',
   thinkingSwitch: 'DeepThink',
-  deactivatedSearchTooltip: 'Search the web when necessary',
-  search: 'Search',
   uploadFile: 'Upload files',
   chatInputStopButtonTooltip: 'Stop',
   uploadMaxMBSize: 'File exceeds the size limit ({size} MB). Please adjust and try again.',
