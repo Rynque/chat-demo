@@ -309,10 +309,14 @@
   word-break: break-word;
 }
 
-/* 中间段落：单独成段、按正文排版，不带过程圆点；折叠思考过程时随过程一起收起 */
+/* 中间段落：单独成段、按正文排版，不带缩进与过程圆点；上下留白对称 */
 .narrative {
   width: 100%;
-  padding: 5px 0 5px 22px;
+  padding: 5px 0;
+
+  :global(.ds-assistant-message-main-content) {
+    padding-bottom: 0;
+  }
 }
 
 /* 执行 JS 的命令提示符，不参与选中 */
