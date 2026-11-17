@@ -264,8 +264,11 @@ const toUserParam = ({ content, files }: UserMessage): MessageParam => {
  */
 export const toReplyMessages = (
   { blocks }: AssistantMessage,
-  // 带工具往返的轮次、以及续写前缀都原样回传思考：服务端可能依赖签名恢复上下文。
-  keepThinking = blocks.some((block) => block.type === 'tool_use' || block.type === 'tool_result')
+  /**
+   * 请求带 tools 时，历史每一轮的 reasoning_content 都必须完整回传，否则返回 400
+   * （见 thinking_mode 指南）；本应用始终声明工具，因此默认保留思考。
+   */
+  keepThinking = true
 ): MessageParam[] => {
   // 服务端阅读链接靠签名恢复网页，缺少有效签名的调用与结果都不回传。
   const unsigned = new Set(

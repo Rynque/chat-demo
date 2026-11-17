@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamMessage } from '../api/client.js'
+import { ApiError } from '../api/client.js'
+import { streamChatMessage } from '../api/chatCompletions.js'
 import type { ChatModel } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
@@ -1015,6 +1016,7 @@ const runToolCalls = async (sessionId: string, reply: AssistantMessage, signal: 
 
 /**
  * 请求并消费流：先补齐附件的 serverId，再发请求；流式增量按动画帧刷新内存，完成、失败或停止后落盘。
+ * 消息请求走 Chat Completions（非思考模式也支持客户端工具），内部事件仍按原有方式处理。
  * 回复停在客户端工具调用上时本地执行工具、回传结果并继续下一轮，最多 MAX_TOOL_ROUNDS 轮。
  * 补传失败时回复记为 upload 错误，可重试。
  * 服务端判定 file_id 失效时重新补传后重发，退避重试且次数有上限，超过则按原始报错收尾。
@@ -1060,7 +1062,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           )
           // 工具续轮：把已产生的 assistant / tool_result 段接在本轮提问之后
           const messages = round === 0 ? base : [...base, ...toReplyMessages(reply)]
-          const events = streamMessage(
+          const events = streamChatMessage(
             useSettings.getState().apiKey ?? '',
             {
               model: initial.model ?? MODEL,
@@ -1077,6 +1079,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           const inputs = new Map<number, string>()
           for await (const event of events) {
             receivedContent ||= event.type === 'content_block_start'
+            // 标题在 Chat Completions 的最后一个 chunk 的 delta.title 下发，
+            // streamChatMessage 已把它归一到 message_delta.delta.title，这里无需区分协议。
             if (
               event.type === 'message_delta' &&
               (event.delta.stop_reason === 'end_turn' ||

@@ -42,13 +42,14 @@ export class ApiError extends Error {
   }
 }
 
-const isErrorBody = (value: unknown): value is ApiErrorBody =>
+/** 同时供 Anthropic 与 Chat Completions 两个客户端复用 */
+export const isErrorBody = (value: unknown): value is ApiErrorBody =>
   typeof value === 'object' &&
   value !== null &&
   'error' in value &&
   typeof (value as ApiErrorBody).error?.message === 'string'
 
-const readErrorResponse = async (
+export const readErrorResponse = async (
   response: Response,
   kind: 'http' | 'protocol' = 'http',
   fallback = response.statusText

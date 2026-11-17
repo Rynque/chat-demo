@@ -1,5 +1,6 @@
 /**
- * Messages API（Anthropic 兼容格式）协议类型，只取本应用用到的部分。
+ * 内部消息/事件协议类型（沿用 Anthropic Messages 形状），只取本应用用到的部分。
+ * 消息请求由 api/chatCompletions.ts 转成 OpenAI 兼容格式发送，流式响应再还原成这里的 MessageStreamEvent。
  * 文档：https://api-docs.deepseek.com/zh-cn/api/create-message
  * 请求只用客户端工具（web_search / fetch_url）触发联网；声明服务端工具或 safety_check.level 为 high 时才会进入扩展模式。
  */
@@ -149,12 +150,21 @@ export type ToolResultBlockParam = {
 }
 
 /**
+ * 文件来源：file 引用 Files API 上传的 file_id；base64 与 url 只用于图片。
+ * 文档：https://api-docs.deepseek.com/zh-cn/guides/vision
+ */
+export type FileSourceParam =
+  | { type: 'file'; file_id: string }
+  | { type: 'base64'; media_type: string; data: string }
+  | { type: 'url'; url: string }
+
+/**
  * 文件块：引用经 Files API 上传的文件，图片用 image、其余用 document；
  * 图片请求需带 anthropic-beta: files-api-2025-04-14；扩展模式不支持 document，返回 400。
  */
 export type FileBlockParam = {
   type: 'image' | 'document'
-  source: { type: 'file'; file_id: string }
+  source: FileSourceParam
 }
 
 /** 接口接受的调用块；历史只回传 kind 为 read_link 的调用 */
