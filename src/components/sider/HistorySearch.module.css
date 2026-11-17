@@ -7,7 +7,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 0;
   background-color: rgba(0, 0, 0, var(--overlay-opacity));
   backdrop-filter: blur(2px);
 
@@ -16,14 +15,22 @@
   }
 }
 
+/* 定位舞台：高 72vh 并垂直居中，未输入时对话框只占头部的高度 */
+.stage {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 660px;
+  max-width: calc(100vw - 32px);
+  height: 72vh;
+}
+
 .dialog {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  width: 660px;
-  max-width: calc(100vw - 32px);
-  height: 654px;
-  max-height: calc(100dvh - 32px);
+  width: 100%;
+  max-height: 100%;
   border-radius: 20px;
   background-color: var(--dsw-alias-bg-layer-2);
   box-shadow:
@@ -32,20 +39,28 @@
   overflow: hidden;
 }
 
-/* 头部：搜索图标 + 输入 + 分隔线 + 关闭，行高 60px */
+/* 输入关键词后展开到舞台高度 */
+.expanded {
+  height: 100%;
+}
+
+/* 头部：36px 图标盒 + 输入 + 分隔线 + 关闭，尺寸与官网一致 */
 .header {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   box-sizing: border-box;
   height: 60px;
-  gap: 8px;
   padding: 12px 12px 12px 8px;
 }
 
 .headerIcon {
   display: flex;
   flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   color: var(--dsw-alias-label-primary);
 }
 
@@ -71,6 +86,7 @@
   flex-shrink: 0;
   width: 1px;
   height: 20px;
+  margin: 0 12px;
   background-color: var(--dsw-alias-border-l2);
 }
 
@@ -79,11 +95,11 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 28px;
   padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: 14px;
   background: none;
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
@@ -270,25 +286,21 @@
   }
 }
 
-/* 移动端：整页搜索，头部 52px，条目字号放大 */
+/* 移动端：整页搜索，舞台占满视口 */
 @media not all and (min-width: 768px) {
-  .overlay {
-    padding: 0;
+  .stage {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
   }
 
-  .dialog {
+  .dialog,
+  .expanded {
     width: 100%;
-    height: 100dvh;
-    max-width: none;
+    height: 100%;
     max-height: none;
     border-radius: 0;
     box-shadow: none;
-  }
-
-  .header {
-    height: 52px;
-    gap: 10px;
-    padding: 14px 16px;
   }
 
   .item {

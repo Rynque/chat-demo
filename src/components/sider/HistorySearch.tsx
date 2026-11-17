@@ -198,102 +198,112 @@ export const HistorySearch = ({ onClose }: { onClose: () => void }) => {
         }
       }}
     >
-      <div
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('historySearchTrigger')}
-      >
-        <div className={styles.header}>
-          <span className={styles.headerIcon} aria-hidden>
-            <IconSearchOutline16 />
-          </span>
-          <input
-            ref={inputRef}
-            className={styles.input}
-            role="searchbox"
-            value={query}
-            placeholder={t('historySearchPlaceholder')}
-            aria-label={t('historySearchPlaceholder')}
-            autoComplete="off"
-            spellCheck={false}
-            autoFocus
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={onKeyDown}
-          />
-          <span className={styles.divider} aria-hidden />
-          <button type="button" className={styles.close} aria-label={t('close')} onClick={onClose}>
-            <IconCloseOutline16 />
-          </button>
-        </div>
-        <div ref={listRef} className={styles.body} role="listbox" aria-label={listLabel}>
-          {status === 'searching' ? (
-            <p className={styles.state} role="status">
-              <span className={styles.spinner} aria-hidden />
-              {t('historySearchSearching')}
-            </p>
-          ) : null}
-          {status === 'error' ? (
-            <p className={styles.state} role="alert">
-              {t('historySearchFailed')}
-              <button
-                type="button"
-                className={styles.stateAction}
-                onClick={() => setAttempt((value) => value + 1)}
-              >
-                {t('retry')}
-              </button>
-            </p>
-          ) : null}
-          {status === 'done' && hits.length === 0 ? (
-            <p className={styles.state}>
+      <div className={styles.stage}>
+        <div
+          className={clsx(styles.dialog, keyword && styles.expanded)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('historySearchTrigger')}
+        >
+          <div className={styles.header}>
+            <span className={styles.headerIcon} aria-hidden>
               <IconSearchOutline16 />
-              {t('historySearchNoResult')}
-            </p>
-          ) : null}
-          {hits.map((hit, index) => (
+            </span>
+            <input
+              ref={inputRef}
+              className={styles.input}
+              role="searchbox"
+              value={query}
+              placeholder={t('historySearchPlaceholder')}
+              aria-label={t('historySearchPlaceholder')}
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={onKeyDown}
+            />
+            <span className={styles.divider} aria-hidden />
             <button
-              key={hit.key}
               type="button"
-              role="option"
-              aria-selected={index === active}
-              aria-posinset={index + 1}
-              aria-setsize={hits.length}
-              data-active={index === active}
-              className={clsx(styles.item, index === active && styles.active)}
-              onMouseEnter={() => setActive(index)}
-              onClick={() => open(hit)}
+              className={styles.close}
+              aria-label={t('close')}
+              onClick={onClose}
             >
-              <span className={styles.itemIcon} aria-hidden>
-                <IconChatBubbleOutline20 />
-              </span>
-              <span className={styles.itemMain}>
-                <span className={styles.itemTop}>
-                  <span className={styles.itemTitle}>
-                    <Highlight
-                      text={hit.sessionTitle || t('untitledChat')}
-                      ranges={hit.titleRanges}
-                      emphasis="title"
-                    />
+              <IconCloseOutline16 />
+            </button>
+          </div>
+          {/* 没有输入内容时只保留头部，结果区不参与布局 */}
+          {keyword ? (
+            <div ref={listRef} className={styles.body} role="listbox" aria-label={listLabel}>
+              {status === 'searching' ? (
+                <p className={styles.state} role="status">
+                  <span className={styles.spinner} aria-hidden />
+                  {t('historySearchSearching')}
+                </p>
+              ) : null}
+              {status === 'error' ? (
+                <p className={styles.state} role="alert">
+                  {t('historySearchFailed')}
+                  <button
+                    type="button"
+                    className={styles.stateAction}
+                    onClick={() => setAttempt((value) => value + 1)}
+                  >
+                    {t('retry')}
+                  </button>
+                </p>
+              ) : null}
+              {status === 'done' && hits.length === 0 ? (
+                <p className={styles.state}>
+                  <IconSearchOutline16 />
+                  {t('historySearchNoResult')}
+                </p>
+              ) : null}
+              {hits.map((hit, index) => (
+                <button
+                  key={hit.key}
+                  type="button"
+                  role="option"
+                  aria-selected={index === active}
+                  aria-posinset={index + 1}
+                  aria-setsize={hits.length}
+                  data-active={index === active}
+                  className={clsx(styles.item, index === active && styles.active)}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => open(hit)}
+                >
+                  <span className={styles.itemIcon} aria-hidden>
+                    <IconChatBubbleOutline20 />
                   </span>
-                  <span className={styles.itemTime}>{formatHitTime(hit.at, locale)}</span>
-                </span>
-                <span className={styles.itemSnippet}>
-                  <Highlight text={hit.snippet} ranges={hit.snippetRanges} emphasis="snippet" />
-                </span>
-              </span>
-            </button>
-          ))}
-          {status === 'more' ? (
-            <p className={styles.state} role="status">
-              <span className={styles.spinner} aria-hidden />
-              {t('historySearchLoadingMore')}
-            </p>
-          ) : null}
-          {status === 'done' && more ? (
-            <button type="button" className={styles.more} onClick={loadMore}>
-              {t('historySearchEarlier')}
-            </button>
+                  <span className={styles.itemMain}>
+                    <span className={styles.itemTop}>
+                      <span className={styles.itemTitle}>
+                        <Highlight
+                          text={hit.sessionTitle || t('untitledChat')}
+                          ranges={hit.titleRanges}
+                          emphasis="title"
+                        />
+                      </span>
+                      <span className={styles.itemTime}>{formatHitTime(hit.at, locale)}</span>
+                    </span>
+                    <span className={styles.itemSnippet}>
+                      <Highlight text={hit.snippet} ranges={hit.snippetRanges} emphasis="snippet" />
+                    </span>
+                  </span>
+                </button>
+              ))}
+              {status === 'more' ? (
+                <p className={styles.state} role="status">
+                  <span className={styles.spinner} aria-hidden />
+                  {t('historySearchLoadingMore')}
+                </p>
+              ) : null}
+              {status === 'done' && more ? (
+                <button type="button" className={styles.more} onClick={loadMore}>
+                  {t('historySearchEarlier')}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>
