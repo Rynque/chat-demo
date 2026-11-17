@@ -141,16 +141,18 @@ const StepItem = ({
       )
     }
     case 'text':
+      // 工具调用之间的说明文字按正文渲染：不带圆点、折叠思考过程时也不隐藏
       return (
-        <ContentItem isLast={isLast} active={false}>
+        <div className={styles.narrative}>
           <Markdown
+            className="ds-assistant-message-main-content"
             content={step.markdown}
             loading={streaming && isLast}
             cacheKey={`${message.id}-${step.key}`}
             disableLink={false}
             sources={sources}
           />
-        </ContentItem>
+        </div>
       )
     case 'search':
       return <SearchRow step={step} message={message} streaming={streaming} isLast={isLast} />

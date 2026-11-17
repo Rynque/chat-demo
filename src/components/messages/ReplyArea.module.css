@@ -309,6 +309,12 @@
   word-break: break-word;
 }
 
+/* 中间段落：单独成段、按正文排版，不带过程圆点；折叠思考过程时随过程一起收起 */
+.narrative {
+  width: 100%;
+  padding: 5px 0 5px 22px;
+}
+
 /* 执行 JS 的命令提示符，不参与选中 */
 .toolPrompt {
   color: var(--dsw-alias-label-tertiary);
