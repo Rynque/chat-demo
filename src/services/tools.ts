@@ -258,7 +258,7 @@ const vfsWriteTool: Tool = {
       'vfs_write',
       `写入 ${result.path}（${result.size} B）`,
       `已写入 ${result.path}（${result.size} B，${countLines(content)} 行）。`,
-      previewSections([{ label: result.path, content }])
+      previewSections([{ label: `写入文件：${result.path}`, content }])
     )
   },
 }
@@ -333,7 +333,7 @@ const runJsTool: Tool = {
     // 一个下拉里按块展示：代码块带 stdout 输出（换行 + > 前缀），再是返回值与写入的文件
     const out = result.stdout.trimEnd()
     const budget = { left: MAX_PREVIEW_TOTAL }
-    const script = previewSection('js', code.trimEnd(), { command: true, budget })
+    const script = previewSection('运行脚本', code.trimEnd(), { command: true, budget })
     const stdout = out ? previewSection('stdout', out, { budget }) : null
     const sections: ToolSection[] = []
     if (script) {
@@ -344,9 +344,12 @@ const runJsTool: Tool = {
       })
     }
     for (const item of [
-      ...(result.stderr ? [{ label: 'stderr', content: result.stderr.trimEnd() }] : []),
+      ...(result.stderr ? [{ label: '错误输出', content: result.stderr.trimEnd() }] : []),
       ...(result.value !== undefined ? [{ label: '返回值', content: result.value }] : []),
-      ...Object.entries(written).map(([path, content]) => ({ label: path, content })),
+      ...Object.entries(written).map(([path, content]) => ({
+        label: `运行文件：${path}`,
+        content,
+      })),
     ]) {
       const section = previewSection(item.label, item.content, { budget })
       if (section) {
