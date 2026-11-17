@@ -49,9 +49,6 @@ const FILE_RETRY_LIMIT = 2
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
 
-/** 智能搜索开关控制是否声明联网工具；关闭时本轮没有任何工具，也不会有隐式读链接 */
-const toolsFor = (search: boolean) => (search ? TOOL_DECLARATIONS : [])
-
 /** 允许自动补标题的请求；手动重命名后取消本轮标题写入，包含主动清空标题的情况。 */
 const titleRequests = new Set<AbortController>()
 
@@ -249,16 +246,15 @@ export const bindChatPersistence = () => {
   }
 }
 
-/** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制是否声明联网工具。 */
+/** 新建回复：只有深度思考是用户可选项，联网由模型在需要时调用工具 */
 const createReply = (): AssistantMessage => {
-  const { thinking, search } = useSettings.getState()
+  const { thinking } = useSettings.getState()
   return {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
     model: MODEL,
     thinking,
-    search,
     prefix: true,
     status: 'pending',
     blocks: [],
@@ -701,13 +697,12 @@ export const continueReply = (sessionId: string, messageId: string) => {
   ) {
     return
   }
-  const { thinking, search } = useSettings.getState()
+  const { thinking } = useSettings.getState()
   const reply: AssistantMessage = {
     ...previous,
     // 未记录请求配置的回复，续写时使用默认模型和当前开关。
     model: previous.model ?? MODEL,
     thinking: previous.thinking ?? thinking,
-    search: previous.search ?? search,
     status: 'pending',
     stopReason: undefined,
     stopDetails: undefined,
@@ -1056,7 +1051,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
               messages,
               thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
               safety_check: SAFETY_CHECK,
-              tools: toolsFor(initial.search ?? false),
+              tools: TOOL_DECLARATIONS,
               ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
             },
             controller.signal

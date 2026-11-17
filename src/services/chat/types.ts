@@ -111,7 +111,7 @@ export type AssistantMessage = MessageBranch & {
   model: ChatModel | null
   /** 请求时是否开启深度思考 */
   thinking?: boolean
-  /** 请求时是否声明本地联网工具；关闭时本轮不带任何工具 */
+  /** 历史记录：旧版本回复是否声明联网工具；新回复始终声明，不再写入该字段 */
   search?: boolean
   /** 本轮请求的系统信息快照；各回答版本独立保存，续写沿用。历史消息中缺省的快照保持为空。 */
   latestReminder?: string
