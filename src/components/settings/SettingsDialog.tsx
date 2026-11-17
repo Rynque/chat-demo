@@ -1,6 +1,7 @@
 import clsx from 'clsx'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  IconCodeOutline16,
   IconDarkOutline16,
   IconDataOutline16,
   IconDownloadOutline16,
@@ -24,9 +25,11 @@ import {
   setLocation,
   setThemePreference,
   setTtsVoice,
+  setVfsLimits,
   useSettings,
   type ThemePreference,
 } from '../../services/settings.js'
+import { stats as vfsStats } from '../../services/vfs.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
@@ -52,6 +55,7 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
     icon: <IconSettingsOutline16 />,
   },
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
+  { value: 'vfs', label: 'settingDialogAsideVfsOptionLabel', icon: <IconCodeOutline16 /> },
 ]
 
 const SettingsContent = () => {
@@ -101,7 +105,7 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <LocationSetting />
             </>
-          ) : (
+          ) : section === 'data' ? (
             <>
               <ApiKeyField editor={apiKeyEditor} />
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
@@ -123,11 +127,122 @@ const SettingsContent = () => {
               />
               {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
+          ) : (
+            <VirtualFilesSetting />
           )}
         </div>
       </Modal>
       {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
+    </>
+  )
+}
+
+/** 虚拟文件配额：脚本与文件工具共用，界面按 KB 输入、内部按字节保存 */
+const VirtualFilesSetting = () => {
+  const t = useTranslate()
+  const limits = useSettings((state) => state.vfsLimits)
+  const [usage, setUsage] = useState<{ files: number; bytes: number } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void vfsStats()
+      .then((stats) => {
+        if (!cancelled) {
+          setUsage(stats)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [limits])
+
+  const numberField = (
+    label: string,
+    value: number,
+    unit: string,
+    min: number,
+    max: number,
+    onChange: (next: number) => void
+  ) => (
+    <div className={styles.numberField}>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        value={value}
+        aria-label={label}
+        onChange={(event) => {
+          const next = Number(event.target.value)
+          if (Number.isFinite(next) && next >= min && next <= max) {
+            onChange(Math.floor(next))
+          }
+        }}
+      />
+      <span className={styles.numberUnit}>{unit}</span>
+    </div>
+  )
+
+  const formatSize = (bytes: number) =>
+    bytes < 1024
+      ? `${bytes}B`
+      : bytes >= 1024 * 1024
+        ? `${(bytes / 1024 / 1024).toFixed(1)}MB`
+        : `${Math.round(bytes / 1024)}KB`
+
+  return (
+    <>
+      <SettingCell
+        label={t('settingsVfsMaxFile')}
+        status={null}
+        action={numberField(
+          t('settingsVfsMaxFile'),
+          Math.round(limits.maxFileBytes / 1024),
+          t('settingsVfsUnitKB'),
+          1,
+          65536,
+          (next) => setVfsLimits({ maxFileBytes: next * 1024 })
+        )}
+      />
+      <SettingCell
+        label={t('settingsVfsMaxTotal')}
+        status={null}
+        action={numberField(
+          t('settingsVfsMaxTotal'),
+          Math.round(limits.maxTotalBytes / 1024),
+          t('settingsVfsUnitKB'),
+          1,
+          65536,
+          (next) => setVfsLimits({ maxTotalBytes: next * 1024 })
+        )}
+      />
+      <SettingCell
+        label={t('settingsVfsMaxFiles')}
+        status={null}
+        action={numberField(
+          t('settingsVfsMaxFiles'),
+          limits.maxFiles,
+          t('settingsVfsUnitFiles'),
+          1,
+          500,
+          (next) => setVfsLimits({ maxFiles: next })
+        )}
+      />
+      <div className={styles.vfsNote}>{t('settingsVfsLimitsDescription')}</div>
+      <SettingCell
+        label={t('settingsVfsUsageLabel')}
+        status={
+          usage
+            ? {
+                key: 'settingsVfsUsage',
+                params: { count: usage.files, size: formatSize(usage.bytes) },
+              }
+            : null
+        }
+        action={null}
+      />
     </>
   )
 }

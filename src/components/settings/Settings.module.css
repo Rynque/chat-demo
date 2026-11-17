@@ -198,6 +198,52 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* 虚拟文件配额：数字输入 + 单位 */
+.numberField {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  input {
+    box-sizing: border-box;
+    width: 92px;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--dsw-alias-border-l2);
+    border-radius: 17px;
+    background-color: var(--dsw-specific-input-major);
+    color: var(--dsw-alias-label-primary);
+    font: inherit;
+    font-size: 14px;
+    text-align: right;
+    outline: none;
+    appearance: textfield;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      margin: 0;
+      appearance: none;
+    }
+
+    &:focus {
+      border-color: var(--dsw-alias-brand-primary);
+    }
+  }
+}
+
+.numberUnit {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.vfsNote {
+  padding: 4px 0 12px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .error {
   font-size: 12px;
   line-height: 18px;
