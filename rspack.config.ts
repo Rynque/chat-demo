@@ -39,7 +39,8 @@ export const createConfig = ({
     cssFilename: 'static/css/[name].[contenthash:8].css',
     cssChunkFilename: 'static/css/async/[name].[contenthash:8].css',
     assetModuleFilename: 'static/media/[name].[contenthash:8][ext]',
-    clean: true,
+    // 清理由 scripts/clean-dist.mjs 完成：Windows 上 dist 被占用时 rspack 删目录会直接失败
+    clean: false,
   },
   devtool: dev ? 'cheap-module-source-map' : false,
   // 开发模式预编译异步模块，保持首次加载代码高亮和公式时的页面状态
