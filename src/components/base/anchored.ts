@@ -98,9 +98,12 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
   const anchorRef = useRef<T | null>(null) as MutableRefObject<T | null>
   const floatingRef = useRef<F | null>(null) as MutableRefObject<F | null>
   const [position, setPosition] = useState<AnchoredPosition | null>(null)
+  /** 已成功定位过：用于忽略触发元素临时塌陷造成的测量结果 */
+  const positionedRef = useRef(false)
 
   /** 位置没有实际变化时不更新状态，避免重新测量引起多余渲染 */
   const applyPosition = useCallback((next: AnchoredPosition) => {
+    positionedRef.current = true
     setPosition((previous) =>
       previous &&
       previous.top === next.top &&
@@ -129,6 +132,10 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
       return
     }
     const rect = anchor.getBoundingClientRect()
+    // 触发元素可能被父级收起而塌成空矩形（如悬停才显示的按钮）；已有位置时保持不动
+    if (rect.width === 0 && rect.height === 0 && positionedRef.current) {
+      return
+    }
     const spaceAbove = rect.top - offset - VIEWPORT_PADDING
     const spaceBelow = window.innerHeight - rect.bottom - offset - VIEWPORT_PADDING
 
@@ -192,6 +199,7 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
 
   useEffect(() => {
     if (!open) {
+      positionedRef.current = false
       setPosition(null)
     }
   }, [open])

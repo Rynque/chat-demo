@@ -20,6 +20,8 @@ export const SessionItem = memo(function SessionItem({
 }) {
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
+  /** 菜单打开期间保持「更多」按钮占位：指针移到菜单上会离开会话行 */
+  const [menuOpen, setMenuOpen] = useState(false)
   const displayTitle = session.title || t('untitledChat')
 
   if (editing) {
@@ -56,8 +58,12 @@ export const SessionItem = memo(function SessionItem({
       }}
     >
       <div className={styles.title}>{displayTitle}</div>
-      <div className={styles.action} onClick={(event) => event.stopPropagation()}>
+      <div
+        className={clsx(styles.action, menuOpen && styles.actionOpen)}
+        onClick={(event) => event.stopPropagation()}
+      >
         <Menu
+          onOpenChange={setMenuOpen}
           options={[
             {
               key: 'rename',

@@ -45,6 +45,11 @@
   margin-left: 4px;
 }
 
+/* 菜单展开期间保持按钮占位：否则指针移到菜单上、会话行失去 hover 时锚点会塌成 0×0 */
+.actionOpen {
+  display: flex;
+}
+
 .renameInput {
   box-sizing: border-box;
   width: 100%;
