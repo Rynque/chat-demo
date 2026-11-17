@@ -1,11 +1,13 @@
 import { request, API_ORIGIN } from './api/client.js'
 import type { ClientToolDeclaration } from './api/types.js'
 import type { ToolCallData, ToolSource } from './chat/types.js'
+import { applyWrites, deleteFile, listFiles, readFile, snapshot, writeFile } from './vfs.js'
+import { runScript } from './tools/jsSandbox.js'
 
 /** 单次工具结果：content 交给模型，data 只用于界面展示 */
 export type ToolOutcome = { content: string; data?: ToolCallData }
 
-export type ToolContext = { apiKey: string; signal: AbortSignal }
+export type ToolContext = { apiKey: string; sessionId: string; signal: AbortSignal }
 
 type Tool = {
   declaration: ClientToolDeclaration
@@ -125,8 +127,171 @@ const fetchTool: Tool = {
   },
 }
 
+/** 脚本执行的时长与输出上限：超出即终止 Worker */
+const EXEC_TIMEOUT_MS = 5000
+const MAX_OUTPUT_BYTES = 8192
+
+const toolOutcome = (
+  name: string,
+  summary: string,
+  content: string,
+  detail?: string
+): ToolOutcome => ({
+  content,
+  data: { kind: 'tool', name, summary, ...(detail ? { detail } : {}) },
+})
+
+const countLines = (text: string) => (text === '' ? 0 : text.split('\n').length)
+
+const vfsListTool: Tool = {
+  declaration: {
+    name: 'vfs_list',
+    description: '列出当前会话虚拟文件系统中的文件路径与大小。',
+    input_schema: { type: 'object', properties: {} },
+  },
+  run: async (_input, { sessionId }) => {
+    const files = await listFiles(sessionId)
+    if (files.length === 0) {
+      return toolOutcome('vfs_list', '文件系统为空', '虚拟文件系统为空。')
+    }
+    const content = files.map((file) => `${file.path}\t${file.size} B`).join('\n')
+    return toolOutcome('vfs_list', `列出 ${files.length} 个文件`, content)
+  },
+}
+
+const vfsReadTool: Tool = {
+  declaration: {
+    name: 'vfs_read',
+    description: '读取虚拟文件，返回带行号的内容；可用 offset/limit 读取片段。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '文件路径，例如 notes/todo.md' },
+        offset: { type: 'integer', description: '起始行号，从 1 开始，默认 1' },
+        limit: { type: 'integer', description: '最多读取的行数，默认 200，上限 400' },
+      },
+      required: ['path'],
+    },
+  },
+  run: async (input, { sessionId }) => {
+    const rawPath = readString(input.path)
+    const file = await readFile(sessionId, rawPath)
+    const offset = Math.max(1, Math.floor(Number(input.offset) || 1))
+    const limit = Math.min(400, Math.max(1, Math.floor(Number(input.limit) || 200)))
+    const lines = file.content.split('\n')
+    const end = Math.min(lines.length, offset - 1 + limit)
+    const body = lines
+      .slice(offset - 1, end)
+      .map((line, index) => `${offset + index}\t${line}`)
+      .join('\n')
+    const tail =
+      end < lines.length ? `\n…（共 ${lines.length} 行，已读到第 ${end} 行，可用 offset 继续）` : ''
+    return toolOutcome(
+      'vfs_read',
+      `读取 ${file.path}（${countLines(file.content)} 行）`,
+      `${file.path}\n${body}${tail}`
+    )
+  },
+}
+
+const vfsWriteTool: Tool = {
+  declaration: {
+    name: 'vfs_write',
+    description: '写入或覆盖虚拟文件。有单文件大小、会话总量和文件数配额，超出会报错。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '文件路径，例如 notes/todo.md' },
+        content: { type: 'string', description: '完整文件内容（文本）' },
+      },
+      required: ['path', 'content'],
+    },
+  },
+  run: async (input, { sessionId }) => {
+    const content = typeof input.content === 'string' ? input.content : String(input.content ?? '')
+    const result = await writeFile(sessionId, readString(input.path), content)
+    return toolOutcome(
+      'vfs_write',
+      `写入 ${result.path}（${result.size} B）`,
+      `已写入 ${result.path}（${result.size} B，${countLines(content)} 行）。`
+    )
+  },
+}
+
+const vfsDeleteTool: Tool = {
+  declaration: {
+    name: 'vfs_delete',
+    description: '删除虚拟文件。',
+    input_schema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: '要删除的文件路径' } },
+      required: ['path'],
+    },
+  },
+  run: async (input, { sessionId }) => {
+    const path = await deleteFile(sessionId, readString(input.path))
+    return toolOutcome('vfs_delete', `删除 ${path}`, `已删除 ${path}。`)
+  },
+}
+
+const runJsTool: Tool = {
+  declaration: {
+    name: 'js_run',
+    description:
+      '在隔离的 Worker 中执行 JavaScript（不是 Node：没有 require、fetch、DOM，也不能访问网络）。可用 console.log/print 输出，用 fs.readFile / fs.writeFile / fs.appendFile / fs.exists / fs.unlink / fs.list 读写虚拟文件。支持顶层 await。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: '要执行的 JavaScript 代码，可直接使用 await' },
+      },
+      required: ['code'],
+    },
+  },
+  run: async (input, { sessionId }) => {
+    const code = typeof input.code === 'string' ? input.code : ''
+    if (!code.trim()) {
+      throw new Error('code 不能为空')
+    }
+    const files = await snapshot(sessionId)
+    const result = await runScript({
+      code,
+      files,
+      timeoutMs: EXEC_TIMEOUT_MS,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+    })
+    const changed =
+      Object.keys(result.files).length > 0 ? await applyWrites(sessionId, result.files) : []
+    const parts: string[] = []
+    if (result.stdout) {
+      parts.push(`stdout:\n${result.stdout.trimEnd()}`)
+    }
+    if (result.stderr) {
+      parts.push(`stderr:\n${result.stderr.trimEnd()}`)
+    }
+    if (result.value !== undefined) {
+      parts.push(`返回值：\n${result.value}`)
+    }
+    if (changed.length > 0) {
+      parts.push(`写入文件：${changed.join(', ')}`)
+    }
+    if (!result.ok) {
+      parts.push(`错误：${result.error ?? '执行失败'}`)
+    }
+    const summary = changed.length > 0 ? `运行 JS，写入 ${changed.length} 个文件` : '运行 JS'
+    return toolOutcome('js_run', summary, parts.join('\n\n') || '（脚本没有输出）')
+  },
+}
+
 /** 新增工具只需在这里加一项：声明给模型、执行在本地 */
-const TOOLS: Tool[] = [webSearchTool, fetchTool]
+const TOOLS: Tool[] = [
+  webSearchTool,
+  fetchTool,
+  vfsListTool,
+  vfsReadTool,
+  vfsWriteTool,
+  vfsDeleteTool,
+  runJsTool,
+]
 
 export const TOOL_DECLARATIONS = TOOLS.map((tool) => tool.declaration)
 

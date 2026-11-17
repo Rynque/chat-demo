@@ -7,7 +7,23 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考开关、侧边栏收起状态 */
+/** 虚拟文件系统的配额，可由用户在设置里调整 */
+export type VfsLimits = {
+  /** 单个文件上限（字节） */
+  maxFileBytes: number
+  /** 会话内总量上限（字节） */
+  maxTotalBytes: number
+  /** 会话内文件数上限 */
+  maxFiles: number
+}
+
+export const DEFAULT_VFS_LIMITS: VfsLimits = {
+  maxFileBytes: 256 * 1024,
+  maxTotalBytes: 1024 * 1024,
+  maxFiles: 32,
+}
+
+/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考开关、侧边栏收起状态、虚拟文件配额 */
 type Settings = {
   apiKey: string | null
   locale: Locale
@@ -16,6 +32,7 @@ type Settings = {
   ttsVoice: TtsVoice
   thinking: boolean
   siderCollapsed: boolean
+  vfsLimits: VfsLimits
 }
 
 const KEYS = {
@@ -26,6 +43,7 @@ const KEYS = {
   ttsVoice: 'chat-demo:tts-voice',
   thinking: 'chat-demo:thinking',
   siderCollapsed: 'chat-demo:sider-collapsed',
+  vfsLimits: 'chat-demo:vfs-limits',
 } as const
 
 const read = (key: string) => {
@@ -85,6 +103,26 @@ const initialThemePreference = (): ThemePreference => {
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
+/** 配额设成非法值时回落到默认值，避免写死一个 0 让工具彻底不可用 */
+const initialVfsLimits = (): VfsLimits => {
+  try {
+    const saved: unknown = JSON.parse(read(KEYS.vfsLimits) ?? 'null')
+    if (typeof saved !== 'object' || saved === null) {
+      return DEFAULT_VFS_LIMITS
+    }
+    const value = saved as Partial<VfsLimits>
+    const pick = (next: unknown, fallback: number) =>
+      typeof next === 'number' && Number.isFinite(next) && next > 0 ? Math.floor(next) : fallback
+    return {
+      maxFileBytes: pick(value.maxFileBytes, DEFAULT_VFS_LIMITS.maxFileBytes),
+      maxTotalBytes: pick(value.maxTotalBytes, DEFAULT_VFS_LIMITS.maxTotalBytes),
+      maxFiles: pick(value.maxFiles, DEFAULT_VFS_LIMITS.maxFiles),
+    }
+  } catch {
+    return DEFAULT_VFS_LIMITS
+  }
+}
+
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
   locale: initialLocale(),
@@ -93,6 +131,7 @@ export const useSettings = create<Settings>(() => ({
   ttsVoice: initialTtsVoice(),
   thinking: read(KEYS.thinking) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
+  vfsLimits: initialVfsLimits(),
 }))
 
 export const setLocale = (locale: Locale) => {
@@ -129,4 +168,11 @@ export const setThinking = (thinking: boolean) => {
 export const setSiderCollapsed = (siderCollapsed: boolean) => {
   write(KEYS.siderCollapsed, String(siderCollapsed))
   useSettings.setState({ siderCollapsed })
+}
+
+/** 合并式更新配额，只覆盖传入的字段 */
+export const setVfsLimits = (limits: Partial<VfsLimits>) => {
+  const next = { ...useSettings.getState().vfsLimits, ...limits }
+  write(KEYS.vfsLimits, JSON.stringify(next))
+  useSettings.setState({ vfsLimits: next })
 }

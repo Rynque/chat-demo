@@ -96,6 +96,8 @@ export type ToolSource = {
 export type ToolCallData =
   | { kind: 'search'; query: string; results: ToolSource[] }
   | { kind: 'fetch'; url: string; title: string; excerpt: string }
+  /** 通用工具步骤：虚拟文件操作、脚本执行等，summary 直接展示在时间线上 */
+  | { kind: 'tool'; name: string; summary: string; detail?: string }
 
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；

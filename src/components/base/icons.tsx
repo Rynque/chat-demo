@@ -581,6 +581,20 @@ export const IconChatBubbleOutline20 = () => (
   </svg>
 )
 
+/** 代码工具：`< >` 折线，用于脚本执行等通用工具步骤 */
+export const IconCodeOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M5.9 4.4 2.4 8l3.5 3.6M10.1 4.4 13.6 8l-3.5 3.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 /** 错误提示图标：圆环 + 感叹号，颜色跟随 currentColor */
 export const IconToastError16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

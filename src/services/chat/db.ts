@@ -2,7 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import { toSessionSummary, type Session, type SessionSummary } from './types.js'
 
 /** IndexedDB 存储结构版本；新增或调整存储、索引时递增。 */
-const DB_VERSION = 11
+const DB_VERSION = 12
 
 /** 文件原件按附件的本地 id 存储，所有引用同一 id 的消息共用一份；用于缩略图、打开查看，以及没有 serverId 时补传。 */
 export type StoredFile = {
@@ -12,6 +12,16 @@ export type StoredFile = {
 
 /** 文件引用留在摘要中，删除会话时通过索引判断原件是否仍被引用。 */
 type StoredSessionSummary = SessionSummary & { fileIds: string[] }
+
+/** 会话里的虚拟文件：按会话隔离，id 由会话与路径拼成 */
+export type StoredVfsFile = {
+  id: string
+  sessionId: string
+  path: string
+  content: string
+  size: number
+  updatedAt: number
+}
 
 interface ChatDB extends DBSchema {
   /** 当前使用的会话，界面读写都在这里 */
@@ -23,6 +33,12 @@ interface ChatDB extends DBSchema {
   }
   /** 当前使用的文件原件 */
   files: { key: string; value: StoredFile }
+  /** 每个会话的虚拟文件系统 */
+  vfs: {
+    key: string
+    value: StoredVfsFile
+    indexes: { sessionId: string }
+  }
   /**
    * 历史导入的暂存：导入过程中会话与原件只写入这两个存储，`sessions` / `files` 保持不变；
    * 全部校验通过后在一个事务中替换正式数据并清空暂存，失败时只清空暂存。
@@ -67,6 +83,12 @@ const getDB = () =>
         : db.createObjectStore('sessionSummaries', { keyPath: 'id' })
       if (!summaries.indexNames.contains('fileIds')) {
         summaries.createIndex('fileIds', 'fileIds', { multiEntry: true })
+      }
+      const vfs = db.objectStoreNames.contains('vfs')
+        ? tx.objectStore('vfs')
+        : db.createObjectStore('vfs', { keyPath: 'id' })
+      if (!vfs.indexNames.contains('sessionId')) {
+        vfs.createIndex('sessionId', 'sessionId')
       }
     },
   }).catch((error: unknown) => {
@@ -248,4 +270,31 @@ export const commitStaging = async (): Promise<SessionSummary[]> => {
 export const reportStorageError = (action: string) => (error: unknown) => {
   // eslint-disable-next-line no-console
   console.error(`[storage] ${action} failed`, error)
+}
+
+/** 会话下的全部虚拟文件 */
+export const listVfsFiles = async (sessionId: string): Promise<StoredVfsFile[]> =>
+  (await getDB()).getAllFromIndex('vfs', 'sessionId', sessionId)
+
+/** 所有会话的虚拟文件，用于设置在统计占用 */
+export const listAllVfsFiles = async (): Promise<StoredVfsFile[]> => (await getDB()).getAll('vfs')
+
+export const readVfsFile = async (id: string): Promise<StoredVfsFile | undefined> =>
+  (await getDB()).get('vfs', id)
+
+export const writeVfsFile = async (file: StoredVfsFile): Promise<void> => {
+  await (await getDB()).put('vfs', file)
+}
+
+/** 一次事务写入多个文件，避免脚本结束时逐条提交 */
+export const writeVfsFiles = async (files: StoredVfsFile[]): Promise<void> => {
+  if (files.length === 0) {
+    return
+  }
+  const tx = (await getDB()).transaction('vfs', 'readwrite')
+  await Promise.all([...files.map((file) => tx.store.put(file)), tx.done])
+}
+
+export const deleteVfsFile = async (id: string): Promise<void> => {
+  await (await getDB()).delete('vfs', id)
 }

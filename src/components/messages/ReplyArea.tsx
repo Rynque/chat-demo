@@ -8,6 +8,7 @@ import {
   IconChevronRightOutline14,
   IconCheckedOutline14,
   IconCloseFill14,
+  IconCodeOutline16,
   IconLinkOutline16,
   IconRightUpOutline14,
   IconSearchOutline16,
@@ -27,6 +28,7 @@ import {
   type SearchStep,
   type Source,
   type Step,
+  type ToolStep,
 } from '../../services/chat/view.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { Markdown } from '../markdown/Markdown.js'
@@ -105,7 +107,7 @@ export const ReplyArea = memo(function ReplyArea({
 })
 
 const stepKey = (step: Step, index: number) =>
-  step.type === 'thinking' || step.type === 'text' || step.type === 'search'
+  step.type === 'thinking' || step.type === 'text' || step.type === 'search' || step.type === 'tool'
     ? step.key
     : `${step.type}-${index}`
 
@@ -158,10 +160,21 @@ const StepItem = ({
       return <FindRow step={step} isLast={isLast} />
     case 'read_link':
       return <ReadLinkRow step={step} isLast={isLast} />
+    case 'tool':
+      return <ToolStepRow step={step} isLast={isLast} />
     default:
       return null
   }
 }
+
+/** 虚拟文件与脚本工具：一行摘要，失败时标红 */
+const ToolStepRow = ({ step, isLast }: { step: ToolStep; isLast: boolean }) => (
+  <ToolRow icon={<IconCodeOutline16 />} isLast={isLast}>
+    <span className={clsx(styles.intro, step.status === 'failed' && styles.chipFailed)}>
+      {step.summary}
+    </span>
+  </ToolRow>
+)
 
 /** 思考或过程性文字：左侧圆点 + 竖线，小号 markdown */
 const ContentItem = ({

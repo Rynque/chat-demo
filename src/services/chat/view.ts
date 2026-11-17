@@ -61,12 +61,29 @@ export type FindStep = {
 
 export type ReadLinkStep = { type: 'read_link'; links: PageItem[] }
 
+/** 通用工具步骤：虚拟文件操作与脚本执行，summary 由工具自己给出 */
+export type ToolStep = {
+  type: 'tool'
+  key: string
+  name: string
+  summary: string
+  status: ToolStatus
+  detail?: string
+}
+
 export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart[] }
 
 /** 工具调用前输出的说明文字 */
 export type PreambleStep = { type: 'text'; key: string; markdown: string }
 
-export type Step = SearchStep | OpenStep | FindStep | ReadLinkStep | ThinkingStep | PreambleStep
+export type Step =
+  | SearchStep
+  | OpenStep
+  | FindStep
+  | ReadLinkStep
+  | ThinkingStep
+  | PreambleStep
+  | ToolStep
 
 export type ReplyView = {
   steps: Step[]
@@ -263,7 +280,16 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
           results: found,
           status,
         })
-      } else {
+      } else if (data?.kind === 'tool') {
+        steps.push({
+          type: 'tool',
+          key: block.id,
+          name: data.name,
+          summary: data.summary,
+          status,
+          ...(data.detail ? { detail: data.detail } : {}),
+        })
+      } else if (data?.kind === 'fetch' || block.name === 'fetch_url') {
         // 抓取网页：进行中先显示目标地址，完成后换成页面标题
         const url = data?.kind === 'fetch' ? data.url : String(block.input.url ?? '')
         const title = data?.kind === 'fetch' ? data.title : url
@@ -274,6 +300,15 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         } else {
           steps.push({ type: 'open', pages: [page] })
         }
+      } else {
+        // 虚拟文件与脚本工具：结果还没回来时先占一行
+        steps.push({
+          type: 'tool',
+          key: block.id,
+          name: block.name,
+          summary: block.name,
+          status,
+        })
       }
       return
     }

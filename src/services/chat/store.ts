@@ -965,7 +965,7 @@ const runToolCalls = async (sessionId: string, reply: AssistantMessage, signal: 
   const outcomes = await Promise.all(
     calls.map(async (call) => {
       try {
-        const outcome = await runTool(call.name, call.input, { apiKey, signal })
+        const outcome = await runTool(call.name, call.input, { apiKey, sessionId, signal })
         return { call, content: outcome.content, data: outcome.data, ok: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
