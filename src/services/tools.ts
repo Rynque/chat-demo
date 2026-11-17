@@ -322,15 +322,8 @@ const runJsTool: Tool = {
     if (!result.ok) {
       parts.push(`错误：${result.error ?? '执行失败'}`)
     }
-    const summary = changed.length > 0 ? `运行 JS，写入 ${changed.length} 个文件` : '运行 JS'
-    const written: Record<string, string> = {}
-    for (const path of changed) {
-      const content = result.files[path]
-      if (content !== undefined) {
-        written[path] = content
-      }
-    }
-    // 一个下拉里按块展示：执行命令（$ 命令 + > 返回值）与运行产生的文件
+    const summary = '运行脚本'
+    // 脚本用 fs.* 改文件属于执行副作用，不算「写入文件」；这里只展示命令本身与返回值
     const budget = { left: MAX_PREVIEW_TOTAL }
     const script = previewSection('执行命令', code.trimEnd(), { command: true, budget })
     // > 后面是返回值；脚本没有返回值时退回显示 stdout，避免丢失输出
@@ -344,13 +337,9 @@ const runJsTool: Tool = {
         ...(output?.truncated ? { truncated: true } : {}),
       })
     }
-    for (const item of [
-      ...(result.stderr ? [{ label: '错误输出', content: result.stderr.trimEnd() }] : []),
-      ...Object.entries(written).map(([path, content]) => ({
-        label: `运行文件：${path}`,
-        content,
-      })),
-    ]) {
+    for (const item of result.stderr
+      ? [{ label: '错误输出', content: result.stderr.trimEnd() }]
+      : []) {
       const section = previewSection(item.label, item.content, { budget })
       if (section) {
         sections.push(section)
