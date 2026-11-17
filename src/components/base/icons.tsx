@@ -510,6 +510,27 @@ export const IconPhotoErrorFill20 = () => (
   </svg>
 )
 
+/**
+ * 相册入口：圆角画框 + 太阳与山形。
+ * 与输入框里其他 16px 图标同笔触，画框用 1.4 描边保持视觉重量一致。
+ */
+export const IconImageOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect
+      x="1.6"
+      y="2.6"
+      width="12.8"
+      height="10.8"
+      rx="2.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+    />
+    <circle cx="10.9" cy="6.2" r="1.15" fill="currentColor" />
+    <path d="M3.4 12.5L6.9 7.9L9.8 11L10.9 9.9L12.6 12.5Z" fill="currentColor" />
+  </svg>
+)
+
 /** 错误提示图标：圆环 + 感叹号，颜色跟随 currentColor */
 export const IconToastError16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

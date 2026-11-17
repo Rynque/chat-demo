@@ -167,6 +167,8 @@ export const en = {
   voiceInputEmpty: 'No speech detected',
   voiceInputLimitReached: 'Maximum recording length reached',
   voiceInputRequiresHttps: 'Voice input requires HTTPS',
+  photoAlbum: 'Choose from album',
+  photoCamera: 'Take a photo',
   apiKeyInvalidRetry: 'Invalid API Key. Please change it and try again.',
   insufficientBalance: 'Insufficient balance',
   rateLimited: 'Too many requests. Please try again later.',

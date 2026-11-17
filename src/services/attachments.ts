@@ -9,6 +9,29 @@ import { ACCEPT_FILE_EXTS } from './uploadExts.js'
 export const ACCEPTED_EXTS = ACCEPT_FILE_EXTS
 /** 选择文件对话框的过滤条件 */
 export const ACCEPT = ACCEPTED_EXTS.map((ext) => `.${ext}`).join(',')
+
+/**
+ * 相册与拍照入口可选的图片格式：只收服务端确认支持的常见位图，
+ * 不直接用 image/*，避免把 heic 等白名单外的格式选进来后整批校验失败。
+ */
+const PHOTO_MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  avif: 'image/avif',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+}
+/** 图片扩展名，顺序与上传白名单一致 */
+export const PHOTO_EXTS = ACCEPTED_EXTS.filter((ext) => ext in PHOTO_MIME_BY_EXT)
+/** 相册与拍照文件选择框的过滤条件：MIME 让移动端直接进相册，扩展名兜底 */
+export const PHOTO_ACCEPT = [
+  ...new Set(PHOTO_EXTS.map((ext) => PHOTO_MIME_BY_EXT[ext])),
+  ...PHOTO_EXTS.map((ext) => `.${ext}`),
+].join(',')
 /** 单文件大小上限与 Files API 一致 */
 export const MAX_SIZE_MB = 64
 /** 按 user_data 上传的文件（纯文本、代码、表格、电子书）原文件上限更小 */

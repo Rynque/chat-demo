@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import {
   IconGlobeLanguageOutline14,
+  IconImageOutline16,
   IconPaperclipOutline16,
   IconSendOutline16,
   IconStopFill16,
@@ -26,7 +27,7 @@ import { Tooltip } from '../base/Tooltip.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
-import { ACCEPT, useUploads } from '../../services/attachments.js'
+import { ACCEPT, PHOTO_ACCEPT, useUploads } from '../../services/attachments.js'
 import { DraftAttachments } from './DraftAttachments.js'
 import { useVoiceInput } from './useVoiceInput.js'
 import { VoiceButton } from './VoiceButton.js'
@@ -54,6 +55,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const albumInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
 
@@ -244,10 +246,29 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           <IconButton
             size="m"
             tone="primary"
+            icon={<IconImageOutline16 />}
+            tooltip={t('photoAlbum')}
+            disabled={importingHistory}
+            onClick={() => ensureApiKey() && albumInputRef.current?.click()}
+          />
+          <IconButton
+            size="m"
+            tone="primary"
             icon={<IconPaperclipOutline16 />}
             tooltip={t('uploadFile')}
             disabled={importingHistory}
             onClick={() => ensureApiKey() && fileInputRef.current?.click()}
+          />
+          <input
+            ref={albumInputRef}
+            type="file"
+            multiple
+            hidden
+            accept={PHOTO_ACCEPT}
+            onChange={(event) => {
+              acceptFiles(Array.from(event.target.files ?? []))
+              event.target.value = ''
+            }}
           />
           <input
             ref={fileInputRef}
