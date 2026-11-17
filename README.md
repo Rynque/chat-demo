@@ -61,16 +61,26 @@ Settings → Data → Delete all chats clears all local conversations, original 
 
 Chat uses `deepseek-flash` by default. Messages are sent through Chat Completions (`/chat/completions`); attachments are uploaded through the Anthropic-compatible Files API (`/anthropic/v1/files`); speech features use ASR / TTS endpoints. Web search and page fetching are declared as client tools (`web_search` / `fetch_url`): the browser calls `/v1/tools/search` and `/v1/tools/fetch`, then returns `tool_result` blocks so the model can continue. Requests also use extensions for titles and `latest_reminder`, so the configured service must support the corresponding capabilities. Supported attachment formats are determined by server-side validation.
 
+Implementation notes:
+
+- Tools run in the browser: `src/services/tools.ts` registers `web_search`, `fetch_url`, `vfs_list`, `vfs_read`, `vfs_write`, `vfs_delete`, `js_run`, and `js_run_file`. On `tool_use` the client executes the tool and returns a `tool_result`; one reply performs at most 4 tool rounds, and identical calls are executed once.
+- Virtual file system: `src/services/vfs.ts` stores files in the IndexedDB `vfs` store, scoped to one conversation. Per-file size, total size, and file count limits are configurable in Settings; exceeding them fails the tool call.
+- JavaScript sandbox: `src/services/tools/jsWorker.ts` runs scripts in a Worker and terminates them after a 5 second timeout. The environment provides no `require`, `fetch`, or DOM, only `console`, `print`, and `fs`. Conversation files are snapshotted before execution and only changed files are written back.
+- The sandbox bounds execution time and misuse; it is not a security boundary. Within one realm, `eval`, function constructors, and dynamic `import()` can bypass global name shadowing, so do not run untrusted code in it.
+
 ```text
 src/
   app/                 Application layout, themes, and global styles
   components/          Chat, settings, Markdown, and other UI components
   i18n/                English and Chinese translations
   services/
-    api/               API requests, SSE, and protocol types
+    api/               API requests, SSE, Chat Completions mapping, and protocol types
     chat/              Conversations, message branches, storage, and history import/export
     markdown/          Markdown parsing, syntax highlighting, and diagrams
     speech/            Audio recording and read-aloud playback
+    tools.ts           Client tools
+    tools/             JavaScript sandbox runtime
+    vfs.ts             Per-conversation virtual file system
   utils/               Shared utilities
 ```
 

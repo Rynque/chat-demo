@@ -61,16 +61,26 @@ API Key 和设置保存在浏览器 localStorage，会话及附件原件保存�
 
 聊天默认使用 `deepseek-flash`，消息通过 Chat Completions（`/chat/completions`）发送，附件通过 Anthropic 兼容的 Files API（`/anthropic/v1/files`）上传；语音使用 ASR / TTS 接口。联网搜索与网页抓取声明为客户端工具（`web_search` / `fetch_url`），由浏览器调用 `/v1/tools/search` 与 `/v1/tools/fetch` 执行，模型返回 `tool_use` 后本地执行、回传 `tool_result` 再继续生成。请求还使用标题、`latest_reminder` 等扩展，接入服务需支持相应能力。附件实际支持的格式以服务端校验为准。
 
+实现要点：
+
+- 工具在浏览器执行：`src/services/tools.ts` 注册 `web_search`、`fetch_url`、`vfs_list`、`vfs_read`、`vfs_write`、`vfs_delete`、`js_run`、`js_run_file`。模型返回 `tool_use` 后本地执行，结果作为 `tool_result` 回传；单条回复最多 4 轮工具往返，同名同参的重复调用只执行一次。
+- 虚拟文件系统：`src/services/vfs.ts` 使用 IndexedDB 的 `vfs` 存储，按会话隔离；单文件大小、总量与文件数配额可在设置中调整，超出时工具返回错误。
+- JavaScript 沙箱：`src/services/tools/jsWorker.ts` 在 Worker 中执行，默认 5 秒超时后终止；环境不提供 `require`、`fetch` 与 DOM，只注入 `console`、`print` 和 `fs`。执行前将会话文件快照进内存，结束后只回写改动过的文件。
+- 沙箱用于限制执行时间与误用，不是安全边界：同一 realm 内 `eval`、函数构造器与动态 `import()` 可以绕过全局名遮蔽，不要用它执行不可信代码。
+
 ```text
 src/
   app/                 应用布局、主题与全局样式
   components/          聊天、设置、Markdown 等界面组件
   i18n/                中英文文案
   services/
-    api/               API 请求、SSE 与协议类型
+    api/               API 请求、SSE、Chat Completions 转换与协议类型
     chat/              会话、消息分支、本地存储与历史导入导出
     markdown/          Markdown 解析、代码高亮与图表
     speech/            录音与朗读
+    tools.ts           客户端工具
+    tools/             JavaScript 沙箱执行器
+    vfs.ts             会话级虚拟文件系统
   utils/               通用工具
 ```
 
