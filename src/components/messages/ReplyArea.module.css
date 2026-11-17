@@ -309,13 +309,14 @@
   word-break: break-word;
 }
 
-/* 中间段落：单独成段、按正文排版，不带缩进与过程圆点；上下留白对称 */
+/* 中间段落：单独成段、按正文排版，不带缩进与过程圆点；上下留白统一为 5px */
 .narrative {
   width: 100%;
   padding: 5px 0;
 
+  /* 正文类默认带 6px 底边距，这里抵消掉，避免上小下大 */
   :global(.ds-assistant-message-main-content) {
-    padding-bottom: 0;
+    padding-bottom: 0 !important;
   }
 }
 
