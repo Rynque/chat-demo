@@ -1,8 +1,8 @@
 /**
  * 内部消息/事件协议类型（沿用 Anthropic Messages 形状），只取本应用用到的部分。
  * 消息请求由 api/chatCompletions.ts 转成 OpenAI 兼容格式发送，流式响应再还原成这里的 MessageStreamEvent。
- * 文档：https://api-docs.deepseek.com/zh-cn/api/create-message
- * 请求只用客户端工具（web_search / fetch_url）触发联网；声明服务端工具或 safety_check.level 为 high 时才会进入扩展模式。
+ * 请求只声明客户端工具；title 属于“扩展模式”，只在思考模式下与客户端工具同场。
+ * 文档：https://api-docs.deepseek.com/zh-cn/api/create-chat-completion
  */
 
 export type ChatModel = 'deepseek-flash' | 'deepseek-v4-pro'
@@ -201,8 +201,6 @@ export type CreateMessageRequest = {
   messages: MessageParam[]
   thinking: { type: 'enabled' | 'disabled' }
   tools: ClientToolDeclaration[]
-  /** 内容安全审核：属于“扩展模式”，只能与思考模式下的客户端工具同场，关闭思考时省略 */
-  safety_check?: { level: 'high' }
   title?: { enabled: boolean }
 }
 

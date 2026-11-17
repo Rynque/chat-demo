@@ -65,7 +65,6 @@ type ChatCompletionRequest = {
   messages: ChatMessage[]
   thinking: CreateMessageRequest['thinking']
   tools: ChatTool[]
-  safety_check?: CreateMessageRequest['safety_check']
   title?: CreateMessageRequest['title']
   stream: true
   stream_options: { include_usage: true }
@@ -312,7 +311,6 @@ const toChatRequest = (request: CreateMessageRequest): ChatCompletionRequest => 
     type: 'function',
     function: { name, description, parameters: input_schema },
   })),
-  ...(request.safety_check ? { safety_check: request.safety_check } : {}),
   ...(request.title ? { title: request.title } : {}),
   stream: true,
   stream_options: { include_usage: true },
