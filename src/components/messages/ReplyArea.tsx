@@ -167,12 +167,12 @@ const StepItem = ({
   }
 }
 
-/** 虚拟文件与脚本工具：有写入结果时可展开查看文件内容 */
+/** 虚拟文件与脚本工具：一个下拉里按块展示代码、输出与写入的文件 */
 const ToolStepRow = ({ step, isLast }: { step: ToolStep; isLast: boolean }) => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
-  const files = step.files ?? []
-  const expandable = files.length > 0
+  const sections = step.sections ?? []
+  const expandable = sections.length > 0
   const label = (
     <span className={clsx(styles.intro, step.status === 'failed' && styles.chipFailed)}>
       {step.summary}
@@ -194,14 +194,21 @@ const ToolStepRow = ({ step, isLast }: { step: ToolStep; isLast: boolean }) => {
         label
       )}
       {expandable && open ? (
-        <div className={styles.toolFiles}>
-          {files.map((file) => (
-            <div key={file.path} className={styles.toolFile}>
-              <div className={styles.toolFileHeader}>
-                <span className={styles.toolFileName}>{file.path}</span>
-                {file.truncated ? <span>{t('toolOutputTruncated')}</span> : null}
+        <div className={styles.toolSections}>
+          {sections.map((section, index) => (
+            <div key={`${section.label}-${index}`} className={styles.toolSection}>
+              <div className={styles.toolSectionHeader}>
+                <span className={styles.toolSectionLabel}>{section.label}</span>
+                {section.truncated ? <span>{t('toolOutputTruncated')}</span> : null}
               </div>
-              <pre className={styles.toolFileCode}>{file.content}</pre>
+              <pre className={styles.toolSectionCode}>
+                {section.command ? (
+                  <span className={styles.toolPrompt} aria-hidden>
+                    {'$ '}
+                  </span>
+                ) : null}
+                {section.content}
+              </pre>
             </div>
           ))}
         </div>

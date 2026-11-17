@@ -263,7 +263,7 @@
   }
 }
 
-.toolFiles {
+.toolSections {
   display: flex;
   flex-basis: 100%;
   flex-direction: column;
@@ -271,14 +271,14 @@
   padding: 6px 0 2px;
 }
 
-.toolFile {
+.toolSection {
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   background-color: var(--dsw-specific-input-major);
 }
 
-.toolFileHeader {
+.toolSectionHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -289,14 +289,14 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.toolFileName {
+.toolSectionLabel {
   overflow: hidden;
   font-family: var(--ds-font-family-code);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.toolFileCode {
+.toolSectionCode {
   margin: 0;
   padding: 8px 10px;
   max-height: 240px;
@@ -307,6 +307,12 @@
   color: var(--dsw-alias-label-primary);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* 执行 JS 的命令提示符，不参与选中 */
+.toolPrompt {
+  color: var(--dsw-alias-label-tertiary);
+  user-select: none;
 }
 
 .page {

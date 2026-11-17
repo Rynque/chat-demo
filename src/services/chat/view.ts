@@ -9,8 +9,8 @@ import type {
 import type {
   AssistantMessage,
   ThinkingPart,
-  ToolFilePreview,
   ToolResultPart,
+  ToolSection,
 } from './types.js'
 
 /**
@@ -73,8 +73,8 @@ export type ToolStep = {
   name: string
   summary: string
   status: ToolStatus
-  /** 可展开查看的文件预览（写入结果） */
-  files?: ToolFilePreview[]
+  /** 展开后按块展示：执行的代码、输出、写入的文件 */
+  sections?: ToolSection[]
 }
 
 export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart[] }
@@ -293,7 +293,7 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
           name: data.name,
           summary: data.summary,
           status,
-          ...(data.files && data.files.length > 0 ? { files: data.files } : {}),
+          ...(data.sections && data.sections.length > 0 ? { sections: data.sections } : {}),
         })
       } else if (data?.kind === 'fetch' || block.name === 'fetch_url') {
         // 抓取网页：进行中先显示目标地址，完成后换成页面标题

@@ -1,6 +1,6 @@
 import { request, API_ORIGIN } from './api/client.js'
 import type { ClientToolDeclaration } from './api/types.js'
-import type { ToolCallData, ToolFilePreview, ToolSource } from './chat/types.js'
+import type { ToolCallData, ToolSection, ToolSource } from './chat/types.js'
 import { applyWrites, deleteFile, listFiles, readFile, snapshot, writeFile } from './vfs.js'
 import { runScript } from './tools/jsSandbox.js'
 
@@ -138,30 +138,51 @@ const toolOutcome = (
   name: string,
   summary: string,
   content: string,
-  files?: ToolFilePreview[]
+  sections?: ToolSection[]
 ): ToolOutcome => ({
   content,
-  data: { kind: 'tool', name, summary, ...(files && files.length > 0 ? { files } : {}) },
+  data: {
+    kind: 'tool',
+    name,
+    summary,
+    ...(sections && sections.length > 0 ? { sections } : {}),
+  },
 })
 
-/** 把写入的文件转成可展开预览，超长截断并标注 */
-const previewFiles = (files: Record<string, string>): ToolFilePreview[] => {
-  const previews: ToolFilePreview[] = []
-  let budget = MAX_PREVIEW_TOTAL
-  for (const [path, content] of Object.entries(files)) {
-    if (budget <= 0) {
-      break
-    }
-    const limit = Math.min(MAX_PREVIEW_CHARS, budget)
-    const truncated = content.length > limit
-    previews.push({
-      path,
-      content: truncated ? `${content.slice(0, limit)}\n…` : content,
-      ...(truncated ? { truncated: true } : {}),
-    })
-    budget -= Math.min(content.length, limit)
+/** 把一段文本转成可展开块，超长截断并标注；多个块共享同一份配额 */
+const previewSection = (
+  label: string,
+  content: string,
+  options: { command?: boolean; budget?: { left: number } } = {}
+): ToolSection | null => {
+  const budget = options.budget?.left ?? MAX_PREVIEW_TOTAL
+  if (budget <= 0 || content === '') {
+    return null
   }
-  return previews
+  const limit = Math.min(MAX_PREVIEW_CHARS, budget)
+  const truncated = content.length > limit
+  if (options.budget) {
+    options.budget.left -= Math.min(content.length, limit)
+  }
+  return {
+    label,
+    content: truncated ? `${content.slice(0, limit)}\n…` : content,
+    ...(options.command ? { command: true } : {}),
+    ...(truncated ? { truncated: true } : {}),
+  }
+}
+
+const previewSections = (
+  items: { label: string; content: string; command?: boolean }[]
+): ToolSection[] => {
+  const budget = { left: MAX_PREVIEW_TOTAL }
+  return items.flatMap((item) => {
+    const section = previewSection(item.label, item.content, {
+      ...(item.command ? { command: true } : {}),
+      budget,
+    })
+    return section ? [section] : []
+  })
 }
 
 const countLines = (text: string) => (text === '' ? 0 : text.split('\n').length)
@@ -237,7 +258,7 @@ const vfsWriteTool: Tool = {
       'vfs_write',
       `写入 ${result.path}（${result.size} B）`,
       `已写入 ${result.path}（${result.size} B，${countLines(content)} 行）。`,
-      previewFiles({ [result.path]: content })
+      previewSections([{ label: result.path, content }])
     )
   },
 }
@@ -309,12 +330,15 @@ const runJsTool: Tool = {
         written[path] = content
       }
     }
-    return toolOutcome(
-      'js_run',
-      summary,
-      parts.join('\n\n') || '（脚本没有输出）',
-      previewFiles(written)
-    )
+    // 一个下拉里按块展示：执行的代码（带提示符）、输出、返回值、写入的文件
+    const sections = previewSections([
+      { label: 'js', content: code.trimEnd(), command: true },
+      ...(result.stdout ? [{ label: 'stdout', content: result.stdout.trimEnd() }] : []),
+      ...(result.stderr ? [{ label: 'stderr', content: result.stderr.trimEnd() }] : []),
+      ...(result.value !== undefined ? [{ label: '返回值', content: result.value }] : []),
+      ...Object.entries(written).map(([path, content]) => ({ label: path, content })),
+    ])
+    return toolOutcome('js_run', summary, parts.join('\n\n') || '（脚本没有输出）', sections)
   },
 }
 

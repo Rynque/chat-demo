@@ -93,10 +93,13 @@ export type ToolSource = {
   publishedAt: string | null
 }
 
-/** 工具步骤里可展开查看的文件预览，内容超长时截断并标记 */
-export type ToolFilePreview = {
-  path: string
+/** 工具步骤里可展开查看的内容块，例如执行的代码、输出、写入的文件 */
+export type ToolSection = {
+  /** 块标题：`js` / `stdout` / 文件路径等 */
+  label: string
   content: string
+  /** 需要命令提示符前缀（执行 JS 时） */
+  command?: boolean
   truncated?: boolean
 }
 
@@ -104,7 +107,7 @@ export type ToolCallData =
   | { kind: 'search'; query: string; results: ToolSource[] }
   | { kind: 'fetch'; url: string; title: string; excerpt: string }
   /** 通用工具步骤：虚拟文件操作、脚本执行等，summary 直接展示在时间线上 */
-  | { kind: 'tool'; name: string; summary: string; files?: ToolFilePreview[] }
+  | { kind: 'tool'; name: string; summary: string; sections?: ToolSection[] }
 
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；
