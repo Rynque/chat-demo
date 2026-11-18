@@ -24,7 +24,7 @@ export const DEFAULT_VFS_LIMITS: VfsLimits = {
   maxFiles: 32,
 }
 
-/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考开关、侧边栏收起状态、虚拟文件配额 */
+/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考开关、侧边栏收起状态、虚拟文件配额、工具轮次 */
 type Settings = {
   apiKey: string | null
   locale: Locale
@@ -34,7 +34,14 @@ type Settings = {
   thinking: boolean
   siderCollapsed: boolean
   vfsLimits: VfsLimits
+  /** 每次回复最多执行多少轮工具调用；用完后强制模型直接作答 */
+  toolRounds: number
 }
+
+/** 工具轮次默认值与可配置范围 */
+export const DEFAULT_TOOL_ROUNDS = 12
+export const TOOL_ROUNDS_MIN = 1
+export const TOOL_ROUNDS_MAX = 50
 
 const KEYS = {
   apiKey: 'chat-demo:api-key',
@@ -45,6 +52,7 @@ const KEYS = {
   thinking: 'chat-demo:thinking',
   siderCollapsed: 'chat-demo:sider-collapsed',
   vfsLimits: 'chat-demo:vfs-limits',
+  toolRounds: 'chat-demo:tool-rounds',
 } as const
 
 const read = (key: string) => {
@@ -124,6 +132,15 @@ const initialVfsLimits = (): VfsLimits => {
   }
 }
 
+/** 工具轮次：缺失或越界时回落到默认值，读取时夹到合法范围 */
+const initialToolRounds = (): number => {
+  const saved = Number(read(KEYS.toolRounds))
+  if (!Number.isFinite(saved) || saved < TOOL_ROUNDS_MIN) {
+    return DEFAULT_TOOL_ROUNDS
+  }
+  return Math.min(TOOL_ROUNDS_MAX, Math.floor(saved))
+}
+
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
   locale: initialLocale(),
@@ -133,6 +150,7 @@ export const useSettings = create<Settings>(() => ({
   thinking: read(KEYS.thinking) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
   vfsLimits: initialVfsLimits(),
+  toolRounds: initialToolRounds(),
 }))
 
 export const setLocale = (locale: Locale) => {
@@ -176,4 +194,11 @@ export const setVfsLimits = (limits: Partial<VfsLimits>) => {
   const next = { ...useSettings.getState().vfsLimits, ...limits }
   write(KEYS.vfsLimits, JSON.stringify(next))
   useSettings.setState({ vfsLimits: next })
+}
+
+/** 工具轮次：写入前夹到合法范围 */
+export const setToolRounds = (toolRounds: number) => {
+  const next = Math.min(TOOL_ROUNDS_MAX, Math.max(TOOL_ROUNDS_MIN, Math.floor(toolRounds)))
+  write(KEYS.toolRounds, String(next))
+  useSettings.setState({ toolRounds: next })
 }
