@@ -142,33 +142,65 @@ const SettingsContent = () => {
   )
 }
 
-/** 数字输入：只在合法范围内提交，避免保存中间态 */
-const numberField = (
-  label: string,
-  value: number,
-  unit: string,
-  min: number,
-  max: number,
+/**
+ * 数字设置：输入过程中不打断（允许暂时为空或越界），失焦或回车时才钳制到范围并保存。
+ * 这样不会出现清空后立刻被旧值顶回来、或逐位输入时被限制卡住的问题。
+ */
+const NumberField = ({
+  label,
+  value,
+  unit,
+  min,
+  max,
+  onChange,
+}: {
+  label: string
+  value: number
+  unit: string
+  min: number
+  max: number
   onChange: (next: number) => void
-) => (
-  <div className={styles.numberField}>
-    <input
-      type="number"
-      inputMode="numeric"
-      min={min}
-      max={max}
-      value={value}
-      aria-label={label}
-      onChange={(event) => {
-        const next = Number(event.target.value)
-        if (Number.isFinite(next) && next >= min && next <= max) {
-          onChange(Math.floor(next))
-        }
-      }}
-    />
-    <span className={styles.numberUnit}>{unit}</span>
-  </div>
-)
+}) => {
+  const [draft, setDraft] = useState(String(value))
+  // 外部值变化（例如另一个入口修改了配额）时同步输入框
+  useEffect(() => {
+    setDraft(String(value))
+  }, [value])
+
+  const commit = () => {
+    const parsed = Number(draft)
+    if (draft.trim() === '' || !Number.isFinite(parsed)) {
+      setDraft(String(value))
+      return
+    }
+    const next = Math.min(max, Math.max(min, Math.floor(parsed)))
+    setDraft(String(next))
+    if (next !== value) {
+      onChange(next)
+    }
+  }
+
+  return (
+    <div className={styles.numberField}>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        value={draft}
+        aria-label={label}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+            event.currentTarget.blur()
+          }
+        }}
+      />
+      <span className={styles.numberUnit}>{unit}</span>
+    </div>
+  )
+}
 
 /** 工具调用轮次：与脚本、检索等所有客户端工具共用，用完强制模型直接作答 */
 const ToolRoundsSetting = () => {
@@ -179,14 +211,16 @@ const ToolRoundsSetting = () => {
       label={t('settingsToolRounds')}
       description={t('settingsToolRoundsDescription')}
       status={null}
-      action={numberField(
-        t('settingsToolRounds'),
-        rounds,
-        t('settingsToolRoundsUnit'),
-        TOOL_ROUNDS_MIN,
-        TOOL_ROUNDS_MAX,
-        setToolRounds
-      )}
+      action={
+        <NumberField
+          label={t('settingsToolRounds')}
+          value={rounds}
+          unit={t('settingsToolRoundsUnit')}
+          min={TOOL_ROUNDS_MIN}
+          max={TOOL_ROUNDS_MAX}
+          onChange={setToolRounds}
+        />
+      }
     />
   )
 }
@@ -223,38 +257,44 @@ const VirtualFilesSetting = () => {
       <SettingCell
         label={t('settingsVfsMaxFile')}
         status={null}
-        action={numberField(
-          t('settingsVfsMaxFile'),
-          Math.round(limits.maxFileBytes / 1024),
-          t('settingsVfsUnitKB'),
-          1,
-          65536,
-          (next) => setVfsLimits({ maxFileBytes: next * 1024 })
-        )}
+        action={
+          <NumberField
+            label={t('settingsVfsMaxFile')}
+            value={Math.round(limits.maxFileBytes / 1024)}
+            unit={t('settingsVfsUnitKB')}
+            min={1}
+            max={65536}
+            onChange={(next) => setVfsLimits({ maxFileBytes: next * 1024 })}
+          />
+        }
       />
       <SettingCell
         label={t('settingsVfsMaxTotal')}
         status={null}
-        action={numberField(
-          t('settingsVfsMaxTotal'),
-          Math.round(limits.maxTotalBytes / 1024),
-          t('settingsVfsUnitKB'),
-          1,
-          65536,
-          (next) => setVfsLimits({ maxTotalBytes: next * 1024 })
-        )}
+        action={
+          <NumberField
+            label={t('settingsVfsMaxTotal')}
+            value={Math.round(limits.maxTotalBytes / 1024)}
+            unit={t('settingsVfsUnitKB')}
+            min={1}
+            max={65536}
+            onChange={(next) => setVfsLimits({ maxTotalBytes: next * 1024 })}
+          />
+        }
       />
       <SettingCell
         label={t('settingsVfsMaxFiles')}
         status={null}
-        action={numberField(
-          t('settingsVfsMaxFiles'),
-          limits.maxFiles,
-          t('settingsVfsUnitFiles'),
-          1,
-          500,
-          (next) => setVfsLimits({ maxFiles: next })
-        )}
+        action={
+          <NumberField
+            label={t('settingsVfsMaxFiles')}
+            value={limits.maxFiles}
+            unit={t('settingsVfsUnitFiles')}
+            min={1}
+            max={500}
+            onChange={(next) => setVfsLimits({ maxFiles: next })}
+          />
+        }
       />
       <div className={styles.vfsNote}>{t('settingsVfsLimitsDescription')}</div>
       <SettingCell
