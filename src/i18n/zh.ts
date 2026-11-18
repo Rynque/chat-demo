@@ -139,7 +139,7 @@ export const zh = {
   presentFileDownload: '下载',
   presentFileBinary: '二进制',
   presentFileMissing: '文件不存在或已被删除',
-  tokenUsageSummary: '上下文 ≈ {context} · 本轮输出 {output} · 会话累计 {total}',
+  tokenUsageSummary: '上下文 {context} · 本轮输出 {output} · 会话累计 {total}',
   avatarMenuSettingsDialogThemeItemLabel: '主题',
   avatarMenuSettingsDialogThemeSelectLightOption: '浅色',
   avatarMenuSettingsDialogThemeSelectDarkOption: '深色',

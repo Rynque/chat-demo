@@ -49,13 +49,14 @@ export const SessionView = ({
         streaming={streaming}
         footer={
           <div className={styles.inputContainer}>
-            <TokenUsage session={session} />
             {pendingAsk ? (
               <AskComposer key={pendingAsk.callId} entry={pendingAsk} />
             ) : (
               <ChatInput sessionId={session.id} />
             )}
-            <div className={styles.caveat}>{t('contentCaveat')}</div>
+            <div className={styles.caveat}>
+              <TokenUsage session={session} streaming={streaming} />
+            </div>
           </div>
         }
       />

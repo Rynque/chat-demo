@@ -145,7 +145,7 @@ export const en = {
   presentFileDownload: 'Download',
   presentFileBinary: 'binary',
   presentFileMissing: 'The file no longer exists',
-  tokenUsageSummary: 'Context ≈ {context} · Last output {output} · Session total {total}',
+  tokenUsageSummary: 'Context {context} · Last output {output} · Session total {total}',
   avatarMenuSettingsDialogThemeItemLabel: 'Theme',
   avatarMenuSettingsDialogThemeSelectLightOption: 'Light',
   avatarMenuSettingsDialogThemeSelectDarkOption: 'Dark',
