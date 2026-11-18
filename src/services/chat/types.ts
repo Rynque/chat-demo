@@ -8,6 +8,7 @@ import type {
   StopReason,
   TextCitation,
 } from '../api/types.js'
+import type { AskAnswer, AskQuestion } from './askQuestions.js'
 
 /**
  * 消息附件。id 是本地标识（IndexedDB files 表的主键，原件按它存储，所有引用同一 id 的消息共用一份），
@@ -93,6 +94,13 @@ export type ToolSource = {
   publishedAt: string | null
 }
 
+/** 产出文件卡片上的条目：路径指向 VFS，title 是展示名 */
+export type PresentedFile = {
+  path: string
+  title: string
+  size: number
+}
+
 /** 工具步骤里可展开查看的内容块，例如执行的代码、输出、写入的文件 */
 export type ToolSection = {
   /** 块标题：`js` / `stdout` / 文件路径等 */
@@ -110,6 +118,10 @@ export type ToolCallData =
   | { kind: 'fetch'; url: string; title: string; excerpt: string }
   /** 通用工具步骤：虚拟文件操作、脚本执行等，summary 直接展示在时间线上 */
   | { kind: 'tool'; name: string; summary: string; sections?: ToolSection[] }
+  /** 询问工具：提问与用户回答，折叠卡片与展开详情都由它渲染 */
+  | { kind: 'ask'; questions: AskQuestion[]; answers: AskAnswer[] }
+  /** 展示产出文件：点击从 VFS 读取下载，文本可预览 */
+  | { kind: 'files'; files: PresentedFile[] }
 
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；

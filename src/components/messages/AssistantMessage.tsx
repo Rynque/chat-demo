@@ -15,6 +15,7 @@ import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import { ReadAloudButton } from './ReadAloudButton.js'
 import { CopyButton } from './CopyButton.js'
+import { PresentedFiles } from './PresentedFiles.js'
 import { ReplyArea } from './ReplyArea.js'
 import { useReplyView } from './useReplyView.js'
 import {
@@ -60,10 +61,12 @@ export const AssistantMessage = memo(function AssistantMessage({
     <div className={styles.message} data-message-id={message.id}>
       {refused ? null : (
         <ReplyArea
+          sessionId={sessionId}
           message={message}
           view={view}
           streaming={streaming}
           hasResponse={!!responseText}
+          isLastMessage={isLast}
         />
       )}
       {answer ? (
@@ -137,6 +140,9 @@ export const AssistantMessage = memo(function AssistantMessage({
             )}
           </span>
         </div>
+      ) : null}
+      {view.presentedFiles.length > 0 ? (
+        <PresentedFiles sessionId={sessionId} files={view.presentedFiles} />
       ) : null}
       {streaming ? null : (
         <div className={styles.bottom}>

@@ -1,13 +1,22 @@
 import { request, API_ORIGIN } from './api/client.js'
 import type { ClientToolDeclaration } from './api/types.js'
 import type { ToolCallData, ToolSection, ToolSource } from './chat/types.js'
+import {
+  ASK_ABORTED_MESSAGE,
+  ASK_CANCELLED_MESSAGE,
+  askAnswersContent,
+  parseAskQuestions,
+  registerAskEntry,
+  unregisterAskEntry,
+} from './chat/askQuestions.js'
 import { applyWrites, deleteFile, listFiles, readFile, snapshot, writeFile } from './vfs.js'
 import { runScript } from './tools/jsSandbox.js'
 
 /** 单次工具结果：content 交给模型，data 只用于界面展示 */
 export type ToolOutcome = { content: string; data?: ToolCallData }
 
-export type ToolContext = { apiKey: string; sessionId: string; signal: AbortSignal }
+/** callId 是这次调用的 tool_use_id，询问工具用它登记提问卡片 */
+export type ToolContext = { apiKey: string; sessionId: string; callId: string; signal: AbortSignal }
 
 type Tool = {
   declaration: ClientToolDeclaration
@@ -68,7 +77,10 @@ const webSearchTool: Tool = {
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: '查询词，支持 site: 等检索语法，长度上限 128 字符。' },
+        query: {
+          type: 'string',
+          description: '查询词，支持 site: 等检索语法，长度上限 128 字符。',
+        },
       },
       required: ['query'],
     },
@@ -397,10 +409,155 @@ const runFileTool: Tool = {
   },
 }
 
+/**
+ * 询问工具：需要用户确认、选择或补充信息时暂停，等回答后继续。
+ * run 返回的 Promise 在用户提交时 resolve，agent 循环随 tool_result 自然续上；
+ * 停止生成时 abort 信号 reject（ASK_ABORTED），取消提问卡片 reject（ASK_CANCELLED）。
+ */
+const askUserTool: Tool = {
+  declaration: {
+    name: 'ask_user_question',
+    description:
+      '向用户提问，在需要确认、选择或补充信息时使用，提问后等待用户回答再继续，不要靠猜。一次可提 1~4 个相关问题；' +
+      '确认类请求用「确认」「取消」两个选项表达，危险操作必须把「取消」列为显式选项，避免误点默认项。' +
+      '不要用本工具闲聊或代替你能自己完成的工作。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        questions: {
+          type: 'array',
+          description: '问题列表。',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: '问题标识，回答按它对应，需在本次调用内唯一。' },
+              question: { type: 'string', description: '问题内容。' },
+              header: { type: 'string', description: '问题所属主题的短标签，12 字以内，可选。' },
+              options: {
+                type: 'array',
+                description: '选项列表，最多 8 个；缺省时问题为自由输入。',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string', description: '选项文案。' },
+                    description: { type: 'string', description: '选项的补充说明，可选。' },
+                  },
+                  required: ['label'],
+                },
+              },
+              multi_select: { type: 'boolean', description: '是否允许多选，缺省为单选。' },
+            },
+            required: ['id', 'question'],
+          },
+        },
+      },
+      required: ['questions'],
+    },
+  },
+  run: (input, { callId, signal }) =>
+    new Promise<ToolOutcome>((resolve, reject) => {
+      const questions = parseAskQuestions(input.questions)
+      if (questions.length === 0) {
+        reject(new Error('questions 不能为空：每项需要 id 与 question，options 的 label 不能为空'))
+        return
+      }
+      if (signal.aborted) {
+        reject(new Error(ASK_ABORTED_MESSAGE))
+        return
+      }
+      const cleanup = () => {
+        signal.removeEventListener('abort', onAbort)
+        unregisterAskEntry(callId)
+      }
+      const onAbort = () => {
+        cleanup()
+        reject(new Error(ASK_ABORTED_MESSAGE))
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      registerAskEntry(callId, {
+        callId,
+        questions,
+        onSubmit: (answers) => {
+          cleanup()
+          resolve({
+            content: askAnswersContent(answers),
+            data: { kind: 'ask', questions, answers },
+          })
+        },
+        onCancel: () => {
+          cleanup()
+          reject(new Error(ASK_CANCELLED_MESSAGE))
+        },
+      })
+    }),
+}
+
+/** 展示文件数量上限：避免一次把整个文件系统抛给用户 */
+const MAX_PRESENT_FILES = 10
+
+/**
+ * 展示产出文件：终止型工具，调用后本轮直接结束、不再请求下一轮（见 streamReply）。
+ * 结果在本地合成，保证历史里 tool_use 与 tool_result 成对。
+ */
+const presentFilesTool: Tool = {
+  declaration: {
+    name: 'present_files',
+    description:
+      '在回答的最后向用户展示产出文件，文件必须已经写入虚拟文件系统。仅在最后一轮调用：' +
+      '调用本工具后本轮直接结束，不能再输出其他内容或调用其他工具；一次可以传多个文件。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          description: '要展示的文件列表，最多 10 个。',
+          items: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: '虚拟文件路径。' },
+              title: { type: 'string', description: '展示用的标题，缺省用路径中的文件名。' },
+            },
+            required: ['path'],
+          },
+        },
+      },
+      required: ['files'],
+    },
+  },
+  run: async (input, { sessionId }) => {
+    const raw = Array.isArray(input.files) ? input.files : []
+    if (raw.length === 0) {
+      throw new Error('files 不能为空')
+    }
+    const files: { path: string; title: string; size: number }[] = []
+    for (const item of raw.slice(0, MAX_PRESENT_FILES)) {
+      if (!isRecord(item)) {
+        continue
+      }
+      const file = await readFile(sessionId, readString(item.path))
+      const title = readString(item.title)
+      files.push({
+        path: file.path,
+        title: title || file.path.split('/').at(-1) || file.path,
+        size: file.size,
+      })
+    }
+    if (files.length === 0) {
+      throw new Error('files 中没有有效条目')
+    }
+    return {
+      content: `已向用户展示 ${files.length} 个文件：${files.map((file) => file.path).join('、')}。`,
+      data: { kind: 'files', files },
+    }
+  },
+}
+
 /** 新增工具只需在这里加一项：声明给模型、执行在本地 */
 const TOOLS: Tool[] = [
   webSearchTool,
   fetchTool,
+  askUserTool,
+  presentFilesTool,
   vfsListTool,
   vfsReadTool,
   vfsWriteTool,

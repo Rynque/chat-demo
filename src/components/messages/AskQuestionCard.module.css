@@ -1,0 +1,315 @@
+/* 询问工具的提问卡片：与工具步骤共用左侧图标 + 竖线的排版 */
+
+.tool {
+  position: relative;
+  display: flex;
+  max-width: 100%;
+  padding: 5px 0;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-markdown-small);
+}
+
+.toolIcon {
+  display: flex;
+  flex-shrink: 0;
+  margin-right: 6px;
+  margin-top: 4px;
+  padding: 1px;
+  color: var(--dsw-alias-brand-primary);
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.stoppedIcon {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.toolBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 6px;
+  width: calc(100% - 30px);
+}
+
+.withLine {
+  &::after {
+    content: '';
+    position: absolute;
+    left: 7.5px;
+    top: 31px;
+    width: 1px;
+    height: calc(100% - 24px);
+    background-color: var(--dsw-alias-label-dimmed);
+  }
+}
+
+.intro {
+  display: inline-block;
+  margin-right: 6px;
+  font-variant: tabular-nums;
+}
+
+.shimmer {
+  color: transparent;
+  background: linear-gradient(
+      90deg,
+      var(--dsw-alias-label-secondary) 0%,
+      var(--dsw-alias-label-secondary) 40%,
+      var(--dsw-alias-label-caption) 50%,
+      var(--dsw-alias-label-secondary) 60%,
+      var(--dsw-alias-label-secondary) 100%
+    )
+    0 0 / 300% 100%;
+  background-clip: text;
+  animation: shimmer 2s ease-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* 折叠行：可点击展开问答详情 */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+
+  svg {
+    flex-shrink: 0;
+    color: var(--dsw-alias-label-tertiary);
+  }
+
+  @media (hover: hover) {
+    &:hover .intro {
+      color: var(--dsw-alias-label-primary);
+    }
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
+  }
+}
+
+.details {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 2px;
+}
+
+.detail {
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background-color: var(--dsw-specific-input-major);
+  padding: 8px 10px;
+}
+
+.detailQuestion {
+  margin-bottom: 4px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.detailAnswer {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 交互卡片 */
+.card {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background-color: var(--dsw-specific-input-major);
+  padding: 12px;
+}
+
+.questionItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.header {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 5px;
+  border-radius: 6px;
+  font: var(--dsw-font-xs-13);
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-markdown-tag);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.question {
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-markdown-base-strong);
+  word-break: break-word;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
+
+  @media (hover: hover) {
+    &:hover {
+      border-color: var(--dsw-alias-brand-primary);
+    }
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--dsw-alias-button-primary-fill);
+  }
+
+  &.selected {
+    border-color: var(--dsw-alias-brand-primary);
+    background-color: var(--dsw-alias-interactive-bg-active);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1px solid var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-brand-primary);
+}
+
+.markChecked {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+/* 多选为方形 */
+.checkbox {
+  border-radius: 4px;
+}
+
+.markIcon {
+  display: flex;
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+.optionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionLabel {
+  word-break: break-word;
+}
+
+.optionDescription {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: none;
+  font: var(--dsw-font-markdown-small);
+  color: var(--dsw-alias-label-primary);
+  outline: none;
+  transition: border-color 0.2s;
+
+  &::placeholder {
+    color: var(--dsw-alias-label-caption);
+  }
+
+  &:focus {
+    border-color: var(--dsw-alias-brand-primary);
+  }
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cancel {
+  padding: 0;
+  border: none;
+  background: none;
+  font: var(--dsw-font-markdown-small);
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: color 0.2s;
+
+  @media (hover: hover) {
+    &:hover {
+      color: var(--dsw-alias-label-primary);
+    }
+  }
+}
+
+.hint {
+  margin-right: auto;
+  color: var(--dsw-alias-label-caption);
+  font-size: 12px;
+}
+
+.reAsk {
+  margin-left: 6px;
+}

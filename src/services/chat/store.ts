@@ -6,6 +6,14 @@ import type { ChatModel, MessageParam } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { useSettings } from '../settings.js'
+import {
+  askAnswersContent,
+  parseAskQuestions,
+  registerAskEntry,
+  unregisterAskEntry,
+  type AskAnswer,
+  type AskQuestion,
+} from './askQuestions.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
 import {
@@ -740,6 +748,8 @@ export const retryUpload = (sessionId: string, messageId: string) => {
 }
 
 type Request = { history: Message[]; question: UserMessage; prefix?: AssistantMessage }
+/** 恢复中断的提问时为 true：回复已带完整的工具往返，从工具续轮开始，不再重发提问前的 base */
+type ResumeRequest = Request & { resumeToolRound?: true }
 
 /** 把补传得到的 serverId 写回会话里所有引用同一附件的消息（编辑、重新生成会共用附件） */
 const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
@@ -782,7 +792,7 @@ const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<str
 }
 
 /** 用会话里的最新消息替换请求快照：重传前会重置附件的 serverId，快照必须跟着更新 */
-const refreshRequest = (sessionId: string, request: Request): Request => {
+const refreshRequest = (sessionId: string, request: ResumeRequest): ResumeRequest => {
   const session = getSession(sessionId)
   if (!session) {
     return request
@@ -794,6 +804,7 @@ const refreshRequest = (sessionId: string, request: Request): Request => {
     history: request.history.map(pick),
     question: pick(request.question),
     prefix: request.prefix,
+    ...(request.resumeToolRound ? { resumeToolRound: true } : {}),
   }
 }
 
@@ -803,7 +814,7 @@ const refreshRequest = (sessionId: string, request: Request): Request => {
  * - 历史轮次（仅进入上下文的）中没有 serverId 的附件，多为导入的图片：从最新的消息往前逐张补传，
  *   失败静默跳过，该附件不进入本次请求，下次发送时再试。
  */
-const prepareFiles = async (sessionId: string, request: Request, signal: AbortSignal) => {
+const prepareFiles = async (sessionId: string, request: ResumeRequest, signal: AbortSignal) => {
   const epoch = historyEpoch
   // 服务端判定 file_id 失效时会清掉会话里的 serverId，先用最新消息替换请求快照，
   // 否则快照里仍是旧 id，补传会直接复用它。
@@ -862,6 +873,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
     history: request.history.map(resolve),
     question: resolve(request.question),
     prefix: request.prefix,
+    ...(request.resumeToolRound ? { resumeToolRound: true } : {}),
   }
 }
 
@@ -944,7 +956,7 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
     signal.addEventListener('abort', onAbort, { once: true })
   })
 
-/** 一条回复里最多几轮工具往返，避免模型反复检索 */
+/** 一条回复里最多几轮工具往返，避免模型反复检索；用完后转入不带工具的兜底回答 */
 const MAX_TOOL_ROUNDS = 4
 
 /** 还没拿到结果的客户端工具调用 */
@@ -957,22 +969,60 @@ const pendingToolCalls = (reply: AssistantMessage): ToolCallPart[] => {
   )
 }
 
+/** 本轮是否已经向用户展示过产出文件（终止型工具的完整结果） */
+const hasPresentedFiles = (reply: AssistantMessage): boolean =>
+  reply.blocks.some((block) => block.type === 'tool_result' && block.data?.kind === 'files')
+
+/**
+ * 结果静态的检索类工具：同名同参的重复调用不再执行，直接复用上次结果并提醒模型换思路，
+ * 避免无限重试或重复搜索。其余工具的重复调用可能是有意为之（如重读改过的文件），照常执行。
+ */
+const REPEAT_REMINDER_TOOLS = new Set(['web_search', 'fetch_url'])
+const REPEAT_REMINDER = '（该调用与上一次相同，已复用上次结果。）'
+
+/** 本轮回复里检索类工具已成功执行的调用：指纹 => 结果文本 */
+const previousSearchResults = (reply: AssistantMessage): Map<string, string> => {
+  const results = new Map(
+    reply.blocks.flatMap((block) =>
+      block.type === 'tool_result' ? [[block.tool_use_id, block] as const] : []
+    )
+  )
+  const previous = new Map<string, string>()
+  for (const block of reply.blocks) {
+    if (block.type !== 'tool_use' || !REPEAT_REMINDER_TOOLS.has(block.name)) {
+      continue
+    }
+    // 只复用成功结果：失败的调用允许原样重试，网络恢复后模型能拿到新结果
+    const content = results.get(block.id)?.data ? results.get(block.id)?.content : undefined
+    if (content) {
+      previous.set(`${block.name}:${JSON.stringify(block.input)}`, content)
+    }
+  }
+  return previous
+}
+
 /** 本地执行工具：结果按调用顺序追加，失败也作为结果交给模型自己决定下一步 */
 const runToolCalls = async (sessionId: string, reply: AssistantMessage, signal: AbortSignal) => {
   const calls = pendingToolCalls(reply)
   const apiKey = useSettings.getState().apiKey ?? ''
   // 模型可能对同一次检索发出多个参数完全相同的调用；按「工具名 + 参数」去重，只执行一次。
   const fingerprint = (call: ToolCallPart) => `${call.name}:${JSON.stringify(call.input)}`
+  const previous = previousSearchResults(reply)
   const unique = new Map<string, ToolCallPart>()
   for (const call of calls) {
-    if (!unique.has(fingerprint(call))) {
+    if (!previous.has(fingerprint(call)) && !unique.has(fingerprint(call))) {
       unique.set(fingerprint(call), call)
     }
   }
   const executed = await Promise.all(
     [...unique.entries()].map(async ([key, call]) => {
       try {
-        const outcome = await runTool(call.name, call.input, { apiKey, sessionId, signal })
+        const outcome = await runTool(call.name, call.input, {
+          apiKey,
+          sessionId,
+          callId: call.id,
+          signal,
+        })
         return { key, content: outcome.content, data: outcome.data, ok: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -981,14 +1031,25 @@ const runToolCalls = async (sessionId: string, reply: AssistantMessage, signal: 
     })
   )
   const byKey = new Map(executed.map((item) => [item.key, item]))
-  const settled = calls.map((call) => ({
-    call,
-    outcome: byKey.get(fingerprint(call)) ?? {
-      content: '工具执行失败：结果缺失',
-      data: undefined,
-      ok: false,
-    },
-  }))
+  const handled = new Set<string>()
+  const settled = calls.map((call) => {
+    const key = fingerprint(call)
+    // 重复调用：跨轮命中上次结果，或同一批里除首个之外的重复项；复用结果并附中性提示
+    if (previous.has(key) || handled.has(key)) {
+      const base = previous.get(key) ?? byKey.get(key)?.content ?? '工具执行失败：结果缺失'
+      handled.add(key)
+      return { call, outcome: { content: `${base}${REPEAT_REMINDER}`, data: undefined, ok: true } }
+    }
+    handled.add(key)
+    return {
+      call,
+      outcome: byKey.get(key) ?? {
+        content: '工具执行失败：结果缺失',
+        data: undefined,
+        ok: false,
+      },
+    }
+  })
   const failed = new Set(settled.filter((item) => !item.outcome.ok).map((item) => item.call.id))
   const results: ToolResultPart[] = settled.map(({ call, outcome }) => ({
     type: 'tool_result',
@@ -1050,13 +1111,25 @@ const generateTitle = async (sessionId: string, messages: MessageParam[], signal
 }
 
 /**
+ * 工具轮次用完后的兜底提示：只随最后一次请求发出，不写入本地历史。
+ * 届时请求不带工具，模型无法再调用，只能基于已有信息给出回答。
+ */
+const TOOL_LIMIT_NUDGE = '工具调用次数已达上限。不要再尝试调用工具，直接根据以上信息给出最终回答。'
+
+/**
  * 请求并消费流：先补齐附件的 serverId，再发请求；流式增量按动画帧刷新内存，完成、失败或停止后落盘。
  * 消息请求走 Chat Completions（非思考模式也支持客户端工具），内部事件仍按原有方式处理。
- * 回复停在客户端工具调用上时本地执行工具、回传结果并继续下一轮，最多 MAX_TOOL_ROUNDS 轮。
+ * 回复停在客户端工具调用上时本地执行工具、回传结果并继续下一轮，最多 MAX_TOOL_ROUNDS 轮；
+ * 轮次用完不再中断，先补齐结果，再以不带工具的请求让模型至少输出一次回答。
+ * present_files 是终止型工具：合成结果后本轮直接结束，不再请求下一轮。
  * 补传失败时回复记为 upload 错误，可重试。
  * 服务端判定 file_id 失效时重新补传后重发，退避重试且次数有上限，超过则按原始报错收尾。
  */
-const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
+const streamReply = async (
+  sessionId: string,
+  initial: AssistantMessage,
+  request: ResumeRequest
+) => {
   const controller = new AbortController()
   if (!getSession(sessionId)?.title) {
     titleRequests.add(controller)
@@ -1074,7 +1147,9 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   try {
     /** 本轮请求的 messages 前缀，关思考时用于补发标题请求 */
     let base: MessageParam[] = []
-    for (let round = 0; ; round += 1) {
+    /** 工具轮次用完后的兜底轮：请求不带工具，只输出一次回答 */
+    let finalAnswer = false
+    for (let round = request.resumeToolRound ? 1 : 0; ; round += 1) {
       /** 这一轮是否收到了正常的 message_stop */
       let complete = false
       for (let attempt = 0; ; attempt += 1) {
@@ -1098,7 +1173,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             latestReminder
           )
           // 工具续轮：把已产生的 assistant / tool_result 段接在本轮提问之后
-          const messages = round === 0 ? base : [...base, ...toReplyMessages(reply)]
+          const messages = [
+            ...(round === 0 ? base : [...base, ...toReplyMessages(reply)]),
+            // 兜底轮附一条仅本次请求可见的提示，让模型直接收尾
+            ...(finalAnswer ? [{ role: 'user' as const, content: TOOL_LIMIT_NUDGE }] : []),
+          ]
           const events = streamChatMessage(
             useSettings.getState().apiKey ?? '',
             {
@@ -1111,7 +1190,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
               ...(initial.thinking && titleRequests.has(controller)
                 ? { title: { enabled: true } }
                 : {}),
-              tools: TOOL_DECLARATIONS,
+              tools: finalAnswer ? [] : TOOL_DECLARATIONS,
             },
             controller.signal
           )
@@ -1145,6 +1224,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           }
           reply = settleReply(reply, 'done', Date.now())
           complete = true
+          if (reply.stopReason === 'tool_use') {
+            // 停在工具调用上先把调用本身落盘：询问工具会挂起等用户回答，期间关闭页面不能丢块
+            updateReply(sessionId, reply)
+            persist(sessionId)
+          }
           break
         } catch (error) {
           if (controller.signal.aborted) {
@@ -1196,11 +1280,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       if (!complete || reply.stopReason !== 'tool_use') {
         break
       }
-      if (pendingToolCalls(reply).length === 0) {
+      // 兜底轮不带工具，模型必须直接输出，不能再进工具循环
+      if (finalAnswer) {
         break
       }
-      if (round >= MAX_TOOL_ROUNDS) {
-        reply = settleReply(reply, 'stopped', Date.now())
+      if (pendingToolCalls(reply).length === 0) {
         break
       }
       reply = await runToolCalls(sessionId, reply, controller.signal)
@@ -1209,8 +1293,16 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = settleReply(reply, 'stopped', Date.now())
         break
       }
+      // present_files 是终止型工具：结果已向用户展示，本轮到此结束，不再请求下一轮
+      if (hasPresentedFiles(reply)) {
+        break
+      }
+      if (round >= MAX_TOOL_ROUNDS - 1) {
+        // 最后一轮工具往返执行完就转入兜底：下一轮不带工具，让模型至少输出一次回答
+        finalAnswer = true
+      }
     }
-    // 关思考时主请求不能带 title（服务端“扩展模式”限制），补一条不带工具的标题请求
+    // 关思考时主请求不能带 title（扩展模式限制），补一条不带工具的标题请求
     if (
       !initial.thinking &&
       !controller.signal.aborted &&
@@ -1231,4 +1323,101 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     }))
     persist(sessionId)
   }
+}
+
+/**
+ * 恢复被中断的提问（刷新或重开页面后 Promise 丢失）：重新登记提问卡片，
+ * 用户提交后把回答写回 tool_result 并续上工具循环。
+ * 只处理可视路径最后一条已结束（done/stopped，均为刷新遗留状态）的回复中、
+ * 尚无结果且是唯一待执行调用的询问工具；
+ * 与其他工具混在同一批的中断调用无法安全续轮，保持「已中断」状态（该轮次不会进入上下文）。
+ */
+export const resumeAskUser = (sessionId: string, messageId: string, callId: string): boolean => {
+  if (get().importingHistory || deletingSessions.has(sessionId) || getStreamController(sessionId)) {
+    return false
+  }
+  const session = getSession(sessionId)
+  if (!session) {
+    return false
+  }
+  const path = getVisibleMessages(session)
+  const reply = path.at(-1)
+  const question = path.at(-2)
+  if (reply?.id !== messageId || reply.role !== 'assistant' || question?.role !== 'user') {
+    return false
+  }
+  if (reply.status !== 'done' && reply.status !== 'stopped') {
+    return false
+  }
+  const block = reply.blocks.find(
+    (item): item is ToolCallPart =>
+      item.type === 'tool_use' && item.id === callId && item.name === 'ask_user_question'
+  )
+  if (!block || pendingToolCalls(reply).length !== 1) {
+    return false
+  }
+  const questions = parseAskQuestions(block.input.questions)
+  if (questions.length === 0) {
+    return false
+  }
+  registerAskEntry(callId, {
+    callId,
+    questions,
+    onSubmit: (answers) => {
+      unregisterAskEntry(callId)
+      void continueAskRound(sessionId, messageId, callId, questions, answers)
+    },
+    onCancel: () => {
+      unregisterAskEntry(callId)
+    },
+  })
+  return true
+}
+
+/** 用户回答了恢复的提问：写回 tool_result，从工具续轮恢复请求 */
+const continueAskRound = async (
+  sessionId: string,
+  messageId: string,
+  callId: string,
+  questions: AskQuestion[],
+  answers: AskAnswer[]
+) => {
+  if (get().importingHistory || deletingSessions.has(sessionId) || getStreamController(sessionId)) {
+    return
+  }
+  const session = getSession(sessionId)
+  if (!session) {
+    return
+  }
+  const path = getVisibleMessages(session)
+  const reply = path.at(-1)
+  const question = path.at(-2)
+  if (reply?.id !== messageId || reply.role !== 'assistant' || question?.role !== 'user') {
+    return
+  }
+  const updated: AssistantMessage = {
+    ...reply,
+    status: 'pending',
+    blocks: [
+      ...reply.blocks.map((block) =>
+        block.type === 'tool_use' && block.id === callId
+          ? { ...block, status: 'done' as const }
+          : block
+      ),
+      {
+        type: 'tool_result',
+        tool_use_id: callId,
+        content: askAnswersContent(answers),
+        data: { kind: 'ask', questions, answers },
+      },
+    ],
+  }
+  updateReply(sessionId, updated)
+  updateSession(sessionId, (current) => ({ ...current, updatedAt: Date.now() }))
+  persist(sessionId)
+  await streamReply(sessionId, updated, {
+    history: path.slice(0, -2),
+    question,
+    resumeToolRound: true,
+  })
 }

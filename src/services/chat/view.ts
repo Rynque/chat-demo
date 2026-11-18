@@ -6,8 +6,10 @@ import type {
   WebSearchResult,
   WebSearchToolResultBlock,
 } from '../api/types.js'
+import { parseAskQuestions, type AskAnswer, type AskQuestion } from './askQuestions.js'
 import type {
   AssistantMessage,
+  PresentedFile,
   ThinkingPart,
   ToolResultPart,
   ToolSection,
@@ -77,6 +79,20 @@ export type ToolStep = {
   sections?: ToolSection[]
 }
 
+/**
+ * 询问工具的提问步骤：
+ * wip：调用还在流式到达或等待执行；answered：已回答，折叠为一行可展开；
+ * interrupted：尚无结果且已停止（刷新遗留），可重新提问；failed：结果已写入但被停止/取消。
+ */
+export type AskStep = {
+  type: 'ask'
+  key: string
+  callId: string
+  questions: AskQuestion[]
+  status: 'wip' | 'answered' | 'interrupted' | 'failed'
+  answers?: AskAnswer[]
+}
+
 export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart[] }
 
 /** 工具调用前输出的说明文字 */
@@ -90,6 +106,7 @@ export type Step =
   | ThinkingStep
   | PreambleStep
   | ToolStep
+  | AskStep
 
 export type ReplyView = {
   steps: Step[]
@@ -99,6 +116,8 @@ export type ReplyView = {
   sources: Source[]
   /** 搜索到的网页（去重），用于底部汇总与搜索结果列表 */
   searchResults: Source[]
+  /** 本轮产出文件（present_files 结果合并去重），在回复末尾展示为可下载卡片 */
+  presentedFiles: PresentedFile[]
 }
 
 export const getSiteName = (url: string) => {
@@ -272,6 +291,52 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
           ? 'failed'
           : 'done'
       flushPreamble()
+      // 询问工具：提问卡片单独渲染，不落到通用工具步骤
+      if (block.name === 'ask_user_question') {
+        const data = result?.data
+        if (data?.kind === 'ask') {
+          steps.push({
+            type: 'ask',
+            key: block.id,
+            callId: block.id,
+            questions: data.questions,
+            answers: data.answers,
+            status: 'answered',
+          })
+        } else if (result) {
+          // 结果已写入但没有展示数据：调用被停止或取消，模型已知悉，不再提供重新提问
+          steps.push({
+            type: 'ask',
+            key: block.id,
+            callId: block.id,
+            questions: parseAskQuestions(block.input),
+            status: 'failed',
+          })
+        } else {
+          steps.push({
+            type: 'ask',
+            key: block.id,
+            callId: block.id,
+            questions: parseAskQuestions(block.input),
+            // 流式中等待执行；已停止的是刷新遗留的中断提问，可重新提问
+            status: streaming ? 'wip' : 'interrupted',
+          })
+        }
+        return
+      }
+      // 产出文件：结果到了由回复末尾的卡片展示，不进时间线
+      if (block.name === 'present_files') {
+        if (!result) {
+          steps.push({
+            type: 'tool',
+            key: block.id,
+            name: block.name,
+            summary: translate('presentFilesPreparing'),
+            status,
+          })
+        }
+        return
+      }
       const data = result?.data
       if (data?.kind === 'search') {
         const found = data.results.map((item) =>
@@ -436,11 +501,26 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   })
 
   const answer = pendingText.length > 0 ? joinTextBlocks(pendingText, registry) : null
+  // 产出文件来自所有 present_files 结果，按路径去重后合并展示
+  const presentedFiles: PresentedFile[] = []
+  const seenPaths = new Set<string>()
+  for (const block of reply.blocks) {
+    if (block.type !== 'tool_result' || block.data?.kind !== 'files') {
+      continue
+    }
+    for (const file of block.data.files) {
+      if (!seenPaths.has(file.path)) {
+        seenPaths.add(file.path)
+        presentedFiles.push(file)
+      }
+    }
+  }
   return {
     steps,
     answer: answer && answer.text ? answer : null,
     sources: registry.list,
     searchResults,
+    presentedFiles,
   }
 }
 
@@ -478,10 +558,14 @@ export const getAreaTitle = (
     }
     return translate(count === 1 ? 'messageThinkDuration' : 'messageThinkDurationPlural', { count })
   }
+  const last = view.steps.at(-1)
+  // 提问挂起（等待执行或等待重新提问）时，标题直接展示等待状态
+  if (last?.type === 'ask' && (last.status === 'wip' || last.status === 'interrupted')) {
+    return translate('askWaitingReply')
+  }
   if (!streaming) {
     return translate('messageThinkStopped')
   }
-  const last = view.steps.at(-1)
   if (last?.type === 'search' && last.status === 'wip') {
     return translate(isImageSearchKind(last.kind) ? 'imageSearching' : 'deepSearchSearching')
   }

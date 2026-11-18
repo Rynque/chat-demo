@@ -32,6 +32,7 @@ import {
 } from '../../services/chat/view.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { Markdown } from '../markdown/Markdown.js'
+import { AskQuestionCard } from './AskQuestionCard.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import styles from './ReplyArea.module.css'
@@ -56,15 +57,20 @@ const useTicker = (active: boolean, interval: number) => {
  * 未开启时只有工具步骤（如普通搜索的「已阅读 N 个网页」）。
  */
 export const ReplyArea = memo(function ReplyArea({
+  sessionId,
   message,
   view,
   streaming,
   hasResponse,
+  isLastMessage,
 }: {
+  sessionId: string
   message: AssistantMessage
   view: ReplyView
   streaming: boolean
   hasResponse: boolean
+  /** 当前回复是否是可视路径最后一条；中断的提问只有末条才能重新提问 */
+  isLastMessage: boolean
 }) {
   useTranslate()
   const [open, setOpen] = useState(true)
@@ -94,9 +100,11 @@ export const ReplyArea = memo(function ReplyArea({
             <StepItem
               key={stepKey(step, index)}
               step={step}
+              sessionId={sessionId}
               message={message}
               sources={view.sources}
               streaming={streaming}
+              isLastMessage={isLastMessage}
               isLast={index === view.steps.length - 1}
             />
           ))}
@@ -107,21 +115,29 @@ export const ReplyArea = memo(function ReplyArea({
 })
 
 const stepKey = (step: Step, index: number) =>
-  step.type === 'thinking' || step.type === 'text' || step.type === 'search' || step.type === 'tool'
+  step.type === 'thinking' ||
+  step.type === 'text' ||
+  step.type === 'search' ||
+  step.type === 'tool' ||
+  step.type === 'ask'
     ? step.key
     : `${step.type}-${index}`
 
 const StepItem = ({
+  sessionId,
   step,
   message,
   sources,
   streaming,
+  isLastMessage,
   isLast,
 }: {
+  sessionId: string
   step: Step
   message: AssistantMessage
   sources: Source[]
   streaming: boolean
+  isLastMessage: boolean
   isLast: boolean
 }) => {
   switch (step.type) {
@@ -164,6 +180,16 @@ const StepItem = ({
       return <ReadLinkRow step={step} isLast={isLast} />
     case 'tool':
       return <ToolStepRow step={step} isLast={isLast} />
+    case 'ask':
+      return (
+        <AskQuestionCard
+          sessionId={sessionId}
+          messageId={message.id}
+          step={step}
+          isLast={isLast}
+          canResume={isLastMessage && !streaming}
+        />
+      )
     default:
       return null
   }
