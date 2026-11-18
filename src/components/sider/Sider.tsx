@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import {
   IconPanelLeftOutline16,
+  IconRightUpOutline14,
   IconSearchOutline16,
   IconSettingsOutline16,
   NewChatIcon,
@@ -20,6 +21,9 @@ import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
 import { HistorySearch } from './HistorySearch.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
+
+/** 标题外链指向本项目的 GitHub 仓库 */
+const REPOSITORY_URL = 'https://github.com/Rynque/chat-demo'
 
 /** 展开的侧边栏：名称与收起按钮、开启新对话、按时间分组的会话列表、底部设置；移动端放在抽屉里，收起按钮关闭抽屉 */
 export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
@@ -71,7 +75,19 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
       <div className={styles.top}>
-        <div className={styles.appName}>{t('appName')}</div>
+        <a
+          className={styles.appLink}
+          href={REPOSITORY_URL}
+          target="_blank"
+          rel="noreferrer"
+          title={t('appRepository')}
+          aria-label={`${t('appName')} · ${t('appRepository')}`}
+        >
+          <span className={styles.appName}>{t('appName')}</span>
+          <span className={styles.appLinkIcon} aria-hidden>
+            <IconRightUpOutline14 />
+          </span>
+        </a>
         <div className={styles.topActions}>
           <IconButton
             size="m"

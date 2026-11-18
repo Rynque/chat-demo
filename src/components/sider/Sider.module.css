@@ -22,6 +22,26 @@
   flex-shrink: 0;
 }
 
+.appLink {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.appLinkIcon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-tertiary);
+  transition: color 0.2s;
+}
+
+.appLink:hover .appLinkIcon {
+  color: var(--dsw-alias-brand-primary);
+}
+
 .appName {
   min-width: 0;
   padding-left: 4px;
