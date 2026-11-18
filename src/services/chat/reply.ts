@@ -283,7 +283,12 @@ export const toReplyMessages = (
    * 请求带 tools 时，历史每一轮的 reasoning_content 都必须完整回传，否则返回 400
    * （见 thinking_mode 指南）；本应用始终声明工具，因此默认保留思考。
    */
-  keepThinking = true
+  keepThinking = true,
+  /**
+   * 关闭工具调用时请求里不带 tools，历史里的客户端工具调用与结果也要一并省略，
+   * 否则会引用未声明的工具。只保留正文与思考。
+   */
+  keepTools = true
 ): MessageParam[] => {
   // 服务端阅读链接靠签名恢复网页，缺少有效签名的调用与结果都不回传。
   const unsigned = new Set(
@@ -318,6 +323,9 @@ export const toReplyMessages = (
 
   for (const block of blocks) {
     if (block.type === 'tool_result') {
+      if (!keepTools) {
+        continue
+      }
       flushAssistant()
       results.push({
         type: 'tool_result',
@@ -353,7 +361,9 @@ export const toReplyMessages = (
         })
       }
     } else if (block.type === 'tool_use') {
-      assistant.push({ type: 'tool_use', id: block.id, name: block.name, input: block.input })
+      if (keepTools) {
+        assistant.push({ type: 'tool_use', id: block.id, name: block.name, input: block.input })
+      }
     } else if (
       block.type === 'server_tool_use' &&
       block.kind === 'read_link' &&
@@ -399,12 +409,14 @@ const normalizeReminder = (value: string | undefined) => {
 /**
  * 把会话转成请求的 messages：只保留「提问 + 有回答的回复」成对的轮次，最后接上本轮提问。
  * 失败或没有回答的轮次不进上下文。续写时末尾再带上本轮 assistant。
+ * keepTools 为 false 时不带任何客户端工具痕迹（请求本身也不声明 tools）。
  */
 export const toRequestMessages = (
   history: Message[],
   question: UserMessage,
   prefix?: AssistantMessage,
-  latestReminder?: string
+  latestReminder?: string,
+  keepTools = true
 ): MessageParam[] => {
   const messages: MessageParam[] = []
   let previousReminder: string | undefined
@@ -422,12 +434,12 @@ export const toRequestMessages = (
       continue
     }
     appendReminder(reply.latestReminder)
-    messages.push(toUserParam(user), ...toReplyMessages(reply))
+    messages.push(toUserParam(user), ...toReplyMessages(reply, true, keepTools))
   }
   appendReminder(latestReminder)
   messages.push(toUserParam(question))
   if (prefix?.prefix) {
-    const last = toReplyMessages(prefix, true).at(-1)
+    const last = toReplyMessages(prefix, true, keepTools).at(-1)
     // 没有非空白正文或有效思考时直接重发原问题，避免服务端拒绝空 Prefill。
     if (
       last?.role === 'assistant' &&
