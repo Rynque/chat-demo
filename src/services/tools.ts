@@ -1,6 +1,6 @@
 import { request, API_ORIGIN } from './api/client.js'
 import type { ClientToolDeclaration } from './api/types.js'
-import type { ToolCallData, ToolSection, ToolSource } from './chat/types.js'
+import type { PresentedFile, ToolCallData, ToolSection, ToolSource } from './chat/types.js'
 import {
   ASK_ABORTED_MESSAGE,
   ASK_CANCELLED_MESSAGE,
@@ -9,7 +9,16 @@ import {
   registerAskEntry,
   unregisterAskEntry,
 } from './chat/askQuestions.js'
-import { applyWrites, deleteFile, listFiles, readFile, snapshot, writeFile } from './vfs.js'
+import {
+  applyWrites,
+  deleteFile,
+  fileKind,
+  listFiles,
+  normalizePath,
+  readFile,
+  snapshot,
+  writeFile,
+} from './vfs.js'
 import { runScript } from './tools/jsSandbox.js'
 
 /** 单次工具结果：content 交给模型，data 只用于界面展示 */
@@ -208,7 +217,12 @@ const vfsListTool: Tool = {
     if (files.length === 0) {
       return toolOutcome('vfs_list', '文件系统为空', '虚拟文件系统为空。')
     }
-    const content = files.map((file) => `${file.path}\t${file.size} B`).join('\n')
+    const content = files
+      .map((file) => {
+        const kind = fileKind(file) === 'binary' ? `binary${file.mimeType ? ` ${file.mimeType}` : ''}` : 'text'
+        return `${file.path}\t${file.size} B\t${kind}`
+      })
+      .join('\n')
     return toolOutcome('vfs_list', `列出 ${files.length} 个文件`, content)
   },
 }
@@ -293,7 +307,10 @@ const runJsTool: Tool = {
   declaration: {
     name: 'js_run',
     description:
-      '在 Worker 沙箱中执行 JavaScript。运行环境不提供 require、fetch、DOM 与网络访问；提供 console、print 与 fs 接口（readFile、writeFile、appendFile、exists、unlink、list），用于读写当前会话的虚拟文件。支持顶层 await。',
+      '在 Worker 沙箱中执行 JavaScript。运行环境不提供 require、fetch、DOM 与网络访问；提供 console、print 与 fs 接口，用于读写当前会话的虚拟文件。' +
+      'fs 同时支持文本与二进制：readFile / writeFile / appendFile 读写文本（二进制文件用 readFile 会报错），' +
+      'readFileBytes / writeFileBytes 读写字节（接受 Uint8Array、ArrayBuffer 或数字数组，可用来生成 zip、图片等二进制文件），' +
+      'stat 查看单个文件的 kind 与字节数，exists / unlink / list 与文本接口相同。支持顶层 await。',
     input_schema: {
       type: 'object',
       properties: {
@@ -310,12 +327,16 @@ const runJsTool: Tool = {
     const files = await snapshot(sessionId)
     const result = await runScript({
       code,
-      files,
+      files: files.text,
+      binaries: files.bytes,
       timeoutMs: EXEC_TIMEOUT_MS,
       maxOutputBytes: MAX_OUTPUT_BYTES,
     })
-    const changed =
-      Object.keys(result.files).length > 0 ? await applyWrites(sessionId, result.files) : []
+    const changed = await applyWrites(
+      sessionId,
+      { text: result.files, bytes: result.binaries },
+      result.deleted
+    )
     const parts: string[] = []
     if (result.stdout) {
       parts.push(`stdout:\n${result.stdout.trimEnd()}`)
@@ -375,12 +396,16 @@ const runFileTool: Tool = {
     const files = await snapshot(sessionId)
     const result = await runScript({
       code: file.content,
-      files,
+      files: files.text,
+      binaries: files.bytes,
       timeoutMs: EXEC_TIMEOUT_MS,
       maxOutputBytes: MAX_OUTPUT_BYTES,
     })
-    const changed =
-      Object.keys(result.files).length > 0 ? await applyWrites(sessionId, result.files) : []
+    const changed = await applyWrites(
+      sessionId,
+      { text: result.files, bytes: result.binaries },
+      result.deleted
+    )
     const parts: string[] = []
     if (result.value !== undefined) {
       parts.push(`返回值：\n${result.value}`)
@@ -496,21 +521,24 @@ const askUserTool: Tool = {
 const MAX_PRESENT_FILES = 10
 
 /**
- * 展示产出文件：终止型工具，调用后本轮直接结束、不再请求下一轮（见 streamReply）。
- * 结果在本地合成，保证历史里 tool_use 与 tool_result 成对。
+ * 展示产出文件：把虚拟文件交给用户，在回复末尾渲染为可下载的卡片。
+ * 普通工具，任何一轮都可以调用，调用后模型仍可继续输出说明；结果在本地合成，
+ * 保证历史里 tool_use 与 tool_result 成对。
  */
 const presentFilesTool: Tool = {
   declaration: {
     name: 'present_files',
     description:
-      '在回答的最后向用户展示产出文件，文件必须已经写入虚拟文件系统。仅在最后一轮调用：' +
-      '调用本工具后本轮直接结束，不能再输出其他内容或调用其他工具；一次可以传多个文件。',
+      '把文件交给用户：展示为可下载的卡片，用户点击即可下载，文本文件还能预览。' +
+      '只要产出了用户需要保存、下载或带走的内容（报告、代码、文档等），就调用本工具交付，' +
+      '不要只把文件留在虚拟文件系统里。随时可以调用，一次可传多个文件，也可以在一轮里多次调用；' +
+      '调用后仍可继续输出文字说明，不会中断回答。文件必须已经写入虚拟文件系统。',
     input_schema: {
       type: 'object',
       properties: {
         files: {
           type: 'array',
-          description: '要展示的文件列表，最多 10 个。',
+          description: '要展示给用户的文件列表，最多 10 个。',
           items: {
             type: 'object',
             properties: {
@@ -529,24 +557,34 @@ const presentFilesTool: Tool = {
     if (raw.length === 0) {
       throw new Error('files 不能为空')
     }
-    const files: { path: string; title: string; size: number }[] = []
+    const files: PresentedFile[] = []
+    const stored = await listFiles(sessionId)
     for (const item of raw.slice(0, MAX_PRESENT_FILES)) {
       if (!isRecord(item)) {
         continue
       }
-      const file = await readFile(sessionId, readString(item.path))
+      const path = readString(item.path)
+      // 二进制文件不能按文本读取，直接按存储记录取元数据
+      const match = stored.find((file) => file.path === normalizePath(path))
+      if (!match) {
+        throw new Error(`文件不存在：${path}`)
+      }
       const title = readString(item.title)
       files.push({
-        path: file.path,
-        title: title || file.path.split('/').at(-1) || file.path,
-        size: file.size,
+        path: match.path,
+        title: title || match.path.split('/').at(-1) || match.path,
+        size: match.size,
+        kind: fileKind(match),
+        ...(match.mimeType ? { mimeType: match.mimeType } : {}),
       })
     }
     if (files.length === 0) {
       throw new Error('files 中没有有效条目')
     }
     return {
-      content: `已向用户展示 ${files.length} 个文件：${files.map((file) => file.path).join('、')}。`,
+      content:
+        `已向用户展示 ${files.length} 个文件：${files.map((file) => file.path).join('、')}。` +
+        '用户可以下载这些文件；如有需要，可以继续补充说明。',
       data: { kind: 'files', files },
     }
   },

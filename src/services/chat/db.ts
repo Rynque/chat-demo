@@ -18,7 +18,15 @@ export type StoredVfsFile = {
   id: string
   sessionId: string
   path: string
+  /** 文本正文；二进制文件为空串 */
   content: string
+  /** 二进制原件；文本文件不存 */
+  blob?: Blob
+  /** 文件类型；旧数据没有该字段，按文本处理 */
+  kind?: 'text' | 'binary'
+  /** 二进制文件的 MIME，缺省为 application/octet-stream */
+  mimeType?: string
+  /** 真实字节数（文本按 UTF-8 编码计） */
   size: number
   updatedAt: number
 }

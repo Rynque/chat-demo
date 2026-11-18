@@ -19,6 +19,9 @@ const limits = () => useSettings.getState().vfsLimits
 const formatBytes = (bytes: number) =>
   bytes >= 1024 ? `${Math.round(bytes / 1024)}KB` : `${bytes}B`
 
+/** 文件类型：旧数据没有 kind，按文本处理 */
+export const fileKind = (file: StoredVfsFile): 'text' | 'binary' => file.kind ?? 'text'
+
 /** 统一成相对路径：反斜杠转正斜杠、去掉 ./ 与多余分隔符，禁止越级 */
 export const normalizePath = (raw: string): string => {
   const path = raw
@@ -51,7 +54,36 @@ export const readFile = async (sessionId: string, rawPath: string): Promise<Stor
   if (!file) {
     throw new Error(`文件不存在：${path}`)
   }
+  if (fileKind(file) === 'binary') {
+    throw new Error(`文件是二进制，不能按文本读取：${path}（请用 fs.readFileBytes）`)
+  }
   return file
+}
+
+/** 二进制读取：文本文件按 UTF-8 编码返回字节，二进制文件原样返回 Blob */
+export const readFileBytes = async (
+  sessionId: string,
+  rawPath: string
+): Promise<{ path: string; blob: Blob; size: number; mimeType: string }> => {
+  const path = normalizePath(rawPath)
+  const file = await readVfsFile(fileId(sessionId, path))
+  if (!file) {
+    throw new Error(`文件不存在：${path}`)
+  }
+  if (fileKind(file) === 'binary' && file.blob) {
+    return {
+      path,
+      blob: file.blob,
+      size: file.size,
+      mimeType: file.mimeType || file.blob.type || 'application/octet-stream',
+    }
+  }
+  return {
+    path,
+    blob: new Blob([file.content], { type: 'text/plain;charset=utf-8' }),
+    size: file.size,
+    mimeType: 'text/plain;charset=utf-8',
+  }
 }
 
 export const deleteFile = async (sessionId: string, rawPath: string): Promise<string> => {
@@ -65,15 +97,9 @@ export const deleteFile = async (sessionId: string, rawPath: string): Promise<st
   return path
 }
 
-/** 写入前按当前配额校验：单文件、总量、文件数都不会被突破 */
-export const writeFile = async (
-  sessionId: string,
-  rawPath: string,
-  content: string
-): Promise<{ path: string; size: number }> => {
-  const path = normalizePath(rawPath)
+/** 写入前的配额校验：单文件、总量、文件数都不会被突破；size 是真实字节数 */
+const assertQuota = async (sessionId: string, path: string, size: number) => {
   const { maxFileBytes, maxTotalBytes, maxFiles } = limits()
-  const size = byteLength(content)
   if (size > maxFileBytes) {
     throw new Error(`文件超过单文件上限（${formatBytes(maxFileBytes)}）`)
   }
@@ -86,35 +112,111 @@ export const writeFile = async (
   if (!existing && files.length >= maxFiles) {
     throw new Error(`文件数量超过上限（${maxFiles} 个）`)
   }
-  const now = Date.now()
+}
+
+/** 写入文本；同一路径上的二进制文件会被替换为文本 */
+export const writeFile = async (
+  sessionId: string,
+  rawPath: string,
+  content: string
+): Promise<{ path: string; size: number }> => {
+  const path = normalizePath(rawPath)
+  const size = byteLength(content)
+  await assertQuota(sessionId, path, size)
   await writeVfsFile({
     id: fileId(sessionId, path),
     sessionId,
     path,
     content,
+    kind: 'text',
     size,
-    updatedAt: now,
+    updatedAt: Date.now(),
   })
   return { path, size }
 }
 
-/** 执行前的文件快照，脚本里的 fs 只操作这份内存副本 */
-export const snapshot = async (sessionId: string): Promise<Record<string, string>> =>
-  Object.fromEntries((await listVfsFiles(sessionId)).map((file) => [file.path, file.content]))
+/** 写入二进制；同一路径上的文本文件会被替换为二进制 */
+export const writeFileBytes = async (
+  sessionId: string,
+  rawPath: string,
+  bytes: Uint8Array,
+  mimeType = 'application/octet-stream'
+): Promise<{ path: string; size: number }> => {
+  const path = normalizePath(rawPath)
+  const size = bytes.byteLength
+  await assertQuota(sessionId, path, size)
+  // 复制一份，避免调用方的缓冲区后续被改写；Blob 由 IndexedDB 原样存储
+  const copy = new Uint8Array(bytes)
+  await writeVfsFile({
+    id: fileId(sessionId, path),
+    sessionId,
+    path,
+    content: '',
+    blob: new Blob([copy], { type: mimeType }),
+    kind: 'binary',
+    mimeType,
+    size,
+    updatedAt: Date.now(),
+  })
+  return { path, size }
+}
 
-/** 脚本结束后回写改动过的文件；空内容视为删除 */
+/** 执行前的文件快照：文本内容与二进制原件（含 MIME）分开传输 */
+export const snapshot = async (
+  sessionId: string
+): Promise<{
+  text: Record<string, string>
+  bytes: Record<string, { data: ArrayBuffer; mimeType?: string }>
+}> => {
+  const files = await listVfsFiles(sessionId)
+  const text: Record<string, string> = {}
+  const bytes: Record<string, { data: ArrayBuffer; mimeType?: string }> = {}
+  for (const file of files) {
+    if (fileKind(file) === 'binary' && file.blob) {
+      bytes[file.path] = {
+        data: await file.blob.arrayBuffer(),
+        ...(file.mimeType ? { mimeType: file.mimeType } : {}),
+      }
+      continue
+    }
+    text[file.path] = file.content
+  }
+  return { text, bytes }
+}
+
+/**
+ * 脚本结束后回写改动：文本与二进制分开处理，删除的路径直接移除。
+ * 文本内容为空视为删除（与旧行为一致），二进制允许零字节文件。
+ */
 export const applyWrites = async (
   sessionId: string,
-  writes: Record<string, string>
+  writes: {
+    text: Record<string, string>
+    bytes: Record<string, { data: ArrayBuffer; mimeType?: string }>
+  },
+  deleted: string[] = []
 ): Promise<string[]> => {
   const changed: string[] = []
-  for (const [path, content] of Object.entries(writes)) {
+  for (const path of deleted) {
+    await deleteFile(sessionId, path).catch(() => {})
+    changed.push(path)
+  }
+  for (const [path, content] of Object.entries(writes.text)) {
     if (content === '') {
       await deleteFile(sessionId, path).catch(() => {})
       changed.push(path)
       continue
     }
     const result = await writeFile(sessionId, path, content)
+    changed.push(result.path)
+  }
+  for (const [path, entry] of Object.entries(writes.bytes)) {
+    const result = await writeFileBytes(
+      sessionId,
+      path,
+      new Uint8Array(entry.data),
+      entry.mimeType || 'application/octet-stream'
+    )
     changed.push(result.path)
   }
   return changed

@@ -1,6 +1,6 @@
 import { useTranslate } from '../../i18n/index.js'
 import { useState } from 'react'
-import { readFile } from '../../services/vfs.js'
+import { readFile, readFileBytes } from '../../services/vfs.js'
 import { getExtension, formatSize } from '../../services/attachments.js'
 import type { PresentedFile } from '../../services/chat/types.js'
 import { showToast } from '../base/toastState.js'
@@ -10,12 +10,11 @@ import { IconBrowseOutline16, IconDownloadOutline16 } from '../base/icons.js'
 import { FileIcon } from '../files/FileIcon.js'
 import styles from './PresentedFiles.module.css'
 
-/** 从 VFS 读取文本并按 Blob 下载；读取失败（文件已被删除）用 toast 说明 */
+/** 从 VFS 读取原件下载：二进制保留原 MIME，文本按 UTF-8 纯文本；读取失败用 toast 说明 */
 const downloadFile = async (sessionId: string, file: PresentedFile) => {
   try {
-    const record = await readFile(sessionId, file.path)
-    const blob = new Blob([record.content], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
+    const record = await readFileBytes(sessionId, file.path)
+    const url = URL.createObjectURL(record.blob)
     const anchor = document.createElement('a')
     anchor.href = url
     anchor.download = file.path.split('/').at(-1) || file.title
@@ -28,7 +27,7 @@ const downloadFile = async (sessionId: string, file: PresentedFile) => {
 
 /**
  * 本轮产出文件（present_files 结果）：卡片显示文件名 / 大小 / 类型，
- * 点击下载；VFS 目前只有文本文件，提供预览弹窗，以后有二进制时只保留下载。
+ * 点击下载；文本文件提供预览弹窗，二进制只保留下载。
  */
 export const PresentedFiles = ({
   sessionId,
@@ -61,18 +60,26 @@ export const PresentedFiles = ({
             <div className={styles.body}>
               <span className={styles.name}>{file.title}</span>
               <span className={styles.meta}>
-                {[getExtension(file.title), formatSize(file.size)].filter(Boolean).join(' · ')}
+                {[
+                  getExtension(file.title),
+                  formatSize(file.size),
+                  file.kind === 'binary' ? t('presentFileBinary') : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </span>
             </div>
             <div className={styles.actions}>
-              <button
-                type="button"
-                className={styles.action}
-                aria-label={t('presentFilePreview')}
-                onClick={() => void openPreview(file)}
-              >
-                <IconBrowseOutline16 />
-              </button>
+              {file.kind === 'text' ? (
+                <button
+                  type="button"
+                  className={styles.action}
+                  aria-label={t('presentFilePreview')}
+                  onClick={() => void openPreview(file)}
+                >
+                  <IconBrowseOutline16 />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className={styles.action}

@@ -99,6 +99,10 @@ export type PresentedFile = {
   path: string
   title: string
   size: number
+  /** 文本可预览，二进制只能下载 */
+  kind: 'text' | 'binary'
+  /** 二进制文件的 MIME，下载时用作 Blob 类型 */
+  mimeType?: string
 }
 
 /** 工具步骤里可展开查看的内容块，例如执行的代码、输出、写入的文件 */

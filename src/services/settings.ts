@@ -18,8 +18,9 @@ export type VfsLimits = {
 }
 
 export const DEFAULT_VFS_LIMITS: VfsLimits = {
-  maxFileBytes: 256 * 1024,
-  maxTotalBytes: 1024 * 1024,
+  // 支持二进制后按真实字节计，单文件与总量适度提高，容纳脚本生成的 zip 等产物
+  maxFileBytes: 1024 * 1024,
+  maxTotalBytes: 8 * 1024 * 1024,
   maxFiles: 32,
 }
 
