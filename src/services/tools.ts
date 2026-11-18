@@ -479,7 +479,7 @@ const askUserTool: Tool = {
       required: ['questions'],
     },
   },
-  run: (input, { callId, signal }) =>
+  run: (input, { callId, sessionId, signal }) =>
     new Promise<ToolOutcome>((resolve, reject) => {
       const questions = parseAskQuestions(input.questions)
       if (questions.length === 0) {
@@ -501,6 +501,7 @@ const askUserTool: Tool = {
       signal.addEventListener('abort', onAbort, { once: true })
       registerAskEntry(callId, {
         callId,
+        sessionId,
         questions,
         onSubmit: (answers) => {
           cleanup()

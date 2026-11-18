@@ -97,6 +97,8 @@ export const parseAskQuestions = (value: unknown): AskQuestion[] => {
 export type AskEntry = {
   /** 调用的 tool_use_id，也是登记表的键 */
   callId: string
+  /** 属于哪个会话：提问卡片占用该会话的输入框位置 */
+  sessionId: string
   questions: AskQuestion[]
   /** 提交所有问题的回答（跳过的题为空 selected）；回调内部负责取消登记 */
   onSubmit: (answers: AskAnswer[]) => void

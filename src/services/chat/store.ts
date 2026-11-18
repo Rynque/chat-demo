@@ -1399,6 +1399,7 @@ export const resumeAskUser = (sessionId: string, messageId: string, callId: stri
   }
   registerAskEntry(callId, {
     callId,
+    sessionId,
     questions,
     onSubmit: (answers) => {
       unregisterAskEntry(callId)
