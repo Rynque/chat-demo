@@ -988,8 +988,7 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
     signal.addEventListener('abort', onAbort, { once: true })
   })
 
-/** 一条回复里最多几轮工具往返，避免模型反复检索；用完后转入不带工具的兜底回答 */
-const MAX_TOOL_ROUNDS = 4
+/** 一条回复的工具轮次上限从设置读取（默认 12，可在设置里调整）；用完后转入不带工具的兜底回答 */
 
 /** 还没拿到结果的客户端工具调用 */
 const pendingToolCalls = (reply: AssistantMessage): ToolCallPart[] => {
@@ -1147,7 +1146,7 @@ const TOOL_LIMIT_NUDGE = '工具调用次数已达上限。不要再尝试调用
 /**
  * 请求并消费流：先补齐附件的 serverId，再发请求；流式增量按动画帧刷新内存，完成、失败或停止后落盘。
  * 消息请求走 Chat Completions（非思考模式也支持客户端工具），内部事件仍按原有方式处理。
- * 回复停在客户端工具调用上时本地执行工具、回传结果并继续下一轮，最多 MAX_TOOL_ROUNDS 轮；
+ * 回复停在客户端工具调用上时本地执行工具、回传结果并继续下一轮，轮次上限见设置（默认 12）；
  * 轮次用完不再中断，先补齐结果，再以不带工具的请求让模型至少输出一次回答。
  * 所有客户端工具（含 present_files）都是普通工具，执行后照常续轮。
  * 补传失败时回复记为 upload 错误，可重试。
@@ -1173,6 +1172,8 @@ const streamReply = async (
   streamFlushes.set(sessionId, flush)
 
   try {
+    /** 本次回复的工具轮次上限：开始时读取一次快照，生成中修改设置不影响本轮 */
+    const maxToolRounds = useSettings.getState().toolRounds
     /** 本轮请求的 messages 前缀，关思考时用于补发标题请求 */
     let base: MessageParam[] = []
     /** 工具轮次用完后的兜底轮：请求不带工具，只输出一次回答 */
@@ -1333,7 +1334,7 @@ const streamReply = async (
         break
       }
       // present_files 只是普通工具：结果已交给界面渲染，模型可以继续说话或继续调用
-      if (round >= MAX_TOOL_ROUNDS - 1) {
+      if (round >= maxToolRounds - 1) {
         // 最后一轮工具往返执行完就转入兜底：下一轮不带工具，让模型至少输出一次回答
         finalAnswer = true
       }
