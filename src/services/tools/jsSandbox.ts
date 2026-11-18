@@ -82,12 +82,19 @@ export const runScript = (request: ScriptRequest): Promise<ScriptResult> =>
 
     worker.addEventListener('error', (event) => {
       clearTimeout(timer)
+      // 模块 Worker 加载失败时浏览器不给 message（常见于 file:// 或资源指纹过期），
+      // 补一条可操作的说明，避免只显示「未知错误」
+      const reason =
+        event.message ||
+        (typeof location !== 'undefined' && location.protocol === 'file:'
+          ? '当前页面以 file:// 打开，浏览器禁止加载脚本执行器；请改用 http(s) 访问或部署版本'
+          : '脚本执行器无法加载（资源缺失或被浏览器拦截），请刷新页面重试')
       finish({
         ...emptyResult(),
         ok: false,
         stdout: current.stdout,
         stderr: current.stderr,
-        error: `执行器崩溃：${event.message || '未知错误'}`,
+        error: `执行器崩溃：${reason}`,
       })
     })
 
