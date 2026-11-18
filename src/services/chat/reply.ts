@@ -373,6 +373,15 @@ export const getContextRounds = (history: Message[]): [UserMessage, AssistantMes
 }
 
 /**
+ * latest_reminder 只接受单行五段格式（日期,星期,位置,平台,语言）。
+ * 旧版本曾把补充说明追加成第二行，服务端会直接拒绝，因此发送时只保留第一行。
+ */
+const normalizeReminder = (value: string | undefined) => {
+  const line = value?.split(/\r?\n/, 1)[0]?.trim()
+  return line ? line : undefined
+}
+
+/**
  * 把会话转成请求的 messages：只保留「提问 + 有回答的回复」成对的轮次，最后接上本轮提问。
  * 失败或没有回答的轮次不进上下文。续写时末尾再带上本轮 assistant。
  */
@@ -385,10 +394,11 @@ export const toRequestMessages = (
   const messages: MessageParam[] = []
   let previousReminder: string | undefined
   const appendReminder = (reminder: string | undefined) => {
+    const normalized = normalizeReminder(reminder)
     // 仅在当前分支首次出现或内容变化时插入快照；缺少快照的消息保持原有内容。
-    if (reminder && reminder !== previousReminder) {
-      messages.push({ role: 'latest_reminder', content: reminder })
-      previousReminder = reminder
+    if (normalized && normalized !== previousReminder) {
+      messages.push({ role: 'latest_reminder', content: normalized })
+      previousReminder = normalized
     }
   }
   for (const [user, reply] of getContextRounds(history)) {

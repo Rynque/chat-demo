@@ -235,9 +235,6 @@ export const en = {
   ttsFailed: 'Failed to read aloud. Please try again later.',
   retry: 'Retry',
   latestReminderLanguage: 'English',
-  latestReminderUploadsMounted:
-    'Files uploaded by the user are mounted in the virtual file system: {paths} (read or edit them with vfs_read or fs, then deliver with present_files).',
-  latestReminderUploadsSkipped: 'These uploads exceed the virtual file limits and were not mounted: {names}.',
   settingsLocaleZhCN: 'Simplified Chinese',
   settingsLocaleEnUS: 'English',
 } satisfies Record<keyof typeof zh, string>

@@ -209,7 +209,7 @@ const countLines = (text: string) => (text === '' ? 0 : text.split('\n').length)
 const vfsListTool: Tool = {
   declaration: {
     name: 'vfs_list',
-    description: '列出当前会话虚拟文件系统中的文件路径与大小。',
+    description: '列出当前会话虚拟文件系统中的文件路径与大小；用户上传的文件挂载在 uploads/ 目录下。',
     input_schema: { type: 'object', properties: {} },
   },
   run: async (_input, { sessionId }) => {

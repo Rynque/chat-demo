@@ -225,9 +225,6 @@ export const zh = {
   ttsFailed: '朗读失败，请稍后再试',
   retry: '重试',
   latestReminderLanguage: '中文',
-  latestReminderUploadsMounted:
-    '用户上传的文件已挂载到虚拟文件系统：{paths}（可直接用 vfs_read 或 fs 读取、修改，再用 present_files 交付）。',
-  latestReminderUploadsSkipped: '以下上传文件超出虚拟文件上限，未挂载：{names}。',
   settingsLocaleZhCN: '简体中文',
   settingsLocaleEnUS: 'English',
 } as const

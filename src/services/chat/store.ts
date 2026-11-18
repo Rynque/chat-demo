@@ -5,7 +5,6 @@ import { streamChatMessage } from '../api/chatCompletions.js'
 import type { ChatModel, MessageParam } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
-import { translate } from '../../i18n/index.js'
 import { useSettings } from '../settings.js'
 import {
   askAnswersContent,
@@ -45,12 +44,13 @@ import {
   type UserMessage,
 } from './types.js'
 import { runTool, TOOL_DECLARATIONS } from '../tools.js'
-import { mountUploads, type MountResult, type MountUpload } from '../vfs.js'
+import { mountUploads, type MountUpload } from '../vfs.js'
 
 /** deepseek-flash 同时支持深度思考与图片输入 */
 const MODEL: ChatModel = 'deepseek-flash'
-/** 所有生成请求统一携带的助手身份说明 */
-const SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
+/** 所有生成请求统一携带的助手身份说明；上传文件挂载规则是静态约定，不随请求变化 */
+const SYSTEM_PROMPT =
+  '该助手为DeepSeek，由深度求索公司创造。用户上传的文件会挂载到虚拟文件系统 uploads/ 目录，可直接读取或修改。'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
 /** 服务端判定 file_id 失效后，重新补传并重发的最多次数（不含首次请求） */
@@ -765,24 +765,6 @@ type Request = {
 /** 恢复中断的提问时为 true：回复已带完整的工具往返，从工具续轮开始，不再重发提问前的 base */
 type ResumeRequest = Request & { resumeToolRound?: true }
 
-/** 把挂载结果写成给模型看的补充信息，随 latestReminder 一起发送 */
-const describeMounts = (result: MountResult) => {
-  const parts: string[] = []
-  if (result.mounted.length > 0) {
-    parts.push(
-      translate('latestReminderUploadsMounted', {
-        paths: result.mounted.map((file) => file.path).join('、'),
-      })
-    )
-  }
-  if (result.skipped.length > 0) {
-    parts.push(
-      translate('latestReminderUploadsSkipped', { names: result.skipped.join('、') })
-    )
-  }
-  return parts.join('\n')
-}
-
 /** 把补传得到的 serverId 写回会话里所有引用同一附件的消息（编辑、重新生成会共用附件） */
 const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
   if (serverIds.size === 0) {
@@ -1178,8 +1160,7 @@ const streamReply = async (
     let base: MessageParam[] = []
     /** 工具轮次用完后的兜底轮：请求不带工具，只输出一次回答 */
     let finalAnswer = false
-    /** 上传文件的挂载结果只算一次；之后的工具续轮沿用同一份说明 */
-    let mountNote = ''
+    /** 上传文件只在首轮挂载一次；latest_reminder 只允许单行五段格式，不能再附加说明 */
     let mounted = !request.mounts || request.mounts.length === 0
     for (let round = request.resumeToolRound ? 1 : 0; ; round += 1) {
       /** 这一轮是否收到了正常的 message_stop */
@@ -1193,16 +1174,12 @@ const streamReply = async (
           preparing = false
           if (!mounted && !prepared.prefix) {
             mounted = true
-            mountNote = describeMounts(
-              await mountUploads(sessionId, request.mounts ?? [])
-            )
+            await mountUploads(sessionId, request.mounts ?? [])
           }
           // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
           const latestReminder = prepared.prefix
             ? prepared.prefix.latestReminder
-            : [createLatestReminder(useSettings.getState()), mountNote]
-                .filter(Boolean)
-                .join('\n')
+            : createLatestReminder(useSettings.getState())
           reply = { ...reply, latestReminder }
           updateReply(sessionId, reply)
           persist(sessionId)
