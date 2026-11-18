@@ -66,7 +66,8 @@ type ChatCompletionRequest = {
   model: CreateMessageRequest['model']
   messages: ChatMessage[]
   thinking: CreateMessageRequest['thinking']
-  tools: ChatTool[]
+  /** 前缀续写不允许携带函数调用，此时整个字段省略而不是传空数组 */
+  tools?: ChatTool[]
   title?: CreateMessageRequest['title']
   stream: true
   stream_options: { include_usage: true }
@@ -318,11 +319,17 @@ const toChatRequest = (request: CreateMessageRequest): ChatCompletionRequest => 
     model: request.model,
     messages,
     thinking: request.thinking,
-    tools: request.tools.map(({ name, description, input_schema }) => ({
-      type: 'function',
-      function: { name, description, parameters: input_schema },
-    })),
-    ...(request.title ? { title: request.title } : {}),
+    // 空工具列表直接省略该字段：前缀续写与函数调用互斥
+    ...(request.tools.length > 0
+      ? {
+          tools: request.tools.map(({ name, description, input_schema }) => ({
+            type: 'function' as const,
+            function: { name, description, parameters: input_schema },
+          })),
+        }
+      : {}),
+    // title 属于扩展模式，前缀续写保持最小标准请求，不携带
+    ...(request.title && !request.continuation ? { title: request.title } : {}),
     stream: true,
     stream_options: { include_usage: true },
   }

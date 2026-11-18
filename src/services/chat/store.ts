@@ -1156,6 +1156,8 @@ const streamReply = async (
   try {
     /** 本次回复的工具轮次上限：开始时读取一次快照，生成中修改设置不影响本轮 */
     const maxToolRounds = useSettings.getState().toolRounds
+    /** 前缀续写不允许携带函数调用：请求不声明 tools，历史里的工具往返也一并省略 */
+    const keepTools = !request.prefix
     /** 本轮请求的 messages 前缀，关思考时用于补发标题请求 */
     let base: MessageParam[] = []
     /** 工具轮次用完后的兜底轮：请求不带工具，只输出一次回答 */
@@ -1187,11 +1189,12 @@ const streamReply = async (
             prepared.history,
             prepared.question,
             prepared.prefix,
-            latestReminder
+            latestReminder,
+            keepTools
           )
           // 工具续轮：把已产生的 assistant / tool_result 段接在本轮提问之后
           const messages = [
-            ...(round === 0 ? base : [...base, ...toReplyMessages(reply)]),
+            ...(round === 0 ? base : [...base, ...toReplyMessages(reply, true, keepTools)]),
             // 兜底轮附一条仅本次请求可见的提示，让模型直接收尾
             ...(finalAnswer ? [{ role: 'user' as const, content: TOOL_LIMIT_NUDGE }] : []),
           ]
@@ -1207,7 +1210,7 @@ const streamReply = async (
               ...(initial.thinking && titleRequests.has(controller)
                 ? { title: { enabled: true } }
                 : {}),
-              tools: finalAnswer ? [] : TOOL_DECLARATIONS,
+              tools: finalAnswer || !keepTools ? [] : TOOL_DECLARATIONS,
               // 续写：末尾 assistant 作为前缀，Chat Completions 走 Beta 前缀补全
               ...(request.prefix ? { continuation: true } : {}),
             },
