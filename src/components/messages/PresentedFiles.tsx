@@ -32,9 +32,12 @@ const downloadFile = async (sessionId: string, file: PresentedFile) => {
 export const PresentedFiles = ({
   sessionId,
   files,
+  showLabel = true,
 }: {
   sessionId: string
   files: PresentedFile[]
+  /** 内联在调用提示下方时不重复显示「产出文件」标签 */
+  showLabel?: boolean
 }) => {
   const t = useTranslate()
   const [preview, setPreview] = useState<{ file: PresentedFile; content: string } | null>(null)
@@ -50,7 +53,7 @@ export const PresentedFiles = ({
 
   return (
     <div className={styles.section}>
-      <span className={styles.label}>{t('presentFilesLabel')}</span>
+      {showLabel ? <span className={styles.label}>{t('presentFilesLabel')}</span> : null}
       <div className={styles.cards}>
         {files.map((file) => (
           <div key={file.path} className={styles.card} title={file.path}>

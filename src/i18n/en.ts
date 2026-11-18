@@ -131,6 +131,7 @@ export const en = {
   askInputPlaceholder: 'Type your answer',
   askSkipped: '(skipped)',
   presentFilesLabel: 'Generated files',
+  presentFilesHint: 'Generated files · {count}',
   presentFilesPreparing: 'Preparing files…',
   presentFilesFailed: 'Could not show the files',
   presentFilePreview: 'Preview',

@@ -125,6 +125,7 @@ export const zh = {
   askInputPlaceholder: '输入你的回答',
   askSkipped: '（未回答）',
   presentFilesLabel: '产出文件',
+  presentFilesHint: '产出文件 · {count} 个',
   presentFilesPreparing: '正在整理产出文件',
   presentFilesFailed: '展示文件失败',
   presentFilePreview: '预览',

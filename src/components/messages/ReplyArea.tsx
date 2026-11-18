@@ -10,6 +10,7 @@ import {
   IconCloseFill14,
   IconCodeOutline16,
   IconLinkOutline16,
+  IconPaperclipOutline16,
   IconRightUpOutline14,
   IconSearchOutline16,
   IconSearchWarningOutline16,
@@ -142,6 +143,7 @@ const StepItem = ({
   isLastMessage: boolean
   isLast: boolean
 }) => {
+  const t = useTranslate()
   switch (step.type) {
     case 'thinking': {
       const lastBlock = step.blocks.at(-1)
@@ -159,8 +161,7 @@ const StepItem = ({
       )
     }
     case 'text':
-      // 工具调用之间的说明文字按正文渲染：不带圆点、折叠思考过程时也不隐藏；
-      // 本段之后调用 present_files 的卡片挂在这段末尾
+      // 工具调用之间的说明文字按正文渲染：不带圆点、折叠思考过程时也不隐藏
       return (
         <div className={styles.narrative}>
           <Markdown
@@ -171,15 +172,18 @@ const StepItem = ({
             disableLink={false}
             sources={sources}
           />
-          {step.presentedFiles.length > 0 ? (
-            <PresentedFiles sessionId={sessionId} files={step.presentedFiles} />
-          ) : null}
         </div>
       )
     case 'files':
+      // 展示文件的调用提示与卡片分离：这里先给调用提示，卡片紧随其后（段落末尾）
       return (
         <div className={styles.narrative}>
-          <PresentedFiles sessionId={sessionId} files={step.files} />
+          <ToolRow icon={<IconPaperclipOutline16 />} isLast>
+            <span className={styles.intro}>
+              {t('presentFilesHint', { count: step.files.length })}
+            </span>
+          </ToolRow>
+          <PresentedFiles sessionId={sessionId} files={step.files} showLabel={false} />
         </div>
       )
     case 'search':

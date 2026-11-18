@@ -96,15 +96,12 @@ export type AskStep = {
 export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart[] }
 
 /** 工具调用前输出的说明文字 */
-export type PreambleStep = {
-  type: 'text'
-  key: string
-  markdown: string
-  /** 这一段之后调用的 present_files 卡片：显示在段落末尾 */
-  presentedFiles: PresentedFile[]
-}
+export type PreambleStep = { type: 'text'; key: string; markdown: string }
 
-/** 没有前置段落时单独成段的产出文件 */
+/**
+ * 产出文件：工具调用提示与卡片一起放在调用位置（通常紧跟在说明段落之后，即段落末尾）。
+ * 卡片本身不混进段落正文，最终正文末尾还会汇总本轮全部卡片。
+ */
 export type PresentedStep = { type: 'files'; key: string; files: PresentedFile[] }
 
 export type Step =
@@ -279,24 +276,14 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         type: 'text',
         key: `text-${pendingText[0].index}`,
         markdown,
-        presentedFiles: [],
       })
     }
     pendingText = []
   }
 
-  /** 把本次展示的文件挂到最近一段说明文字的末尾；没有段落时单独成段 */
-  const attachPresented = (blockId: string, files: PresentedFile[]) => {
+  /** 产出文件单独成段：调用提示在调用位置，卡片紧随其后（即上一段的末尾） */
+  const addPresented = (blockId: string, files: PresentedFile[]) => {
     flushPreamble()
-    const last = steps.at(-1)
-    if (last?.type === 'text') {
-      for (const file of files) {
-        if (!last.presentedFiles.some((item) => item.path === file.path)) {
-          last.presentedFiles.push(file)
-        }
-      }
-      return
-    }
     const seen = new Set<string>()
     steps.push({
       type: 'files',
@@ -359,12 +346,11 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         }
         return
       }
-      // 产出文件：成功时卡片挂在所在段落末尾（最终正文末尾还会汇总，见 presentedFiles）；
-      // 未完成或失败时占一行
+      // 产出文件：调用提示与卡片在调用位置单独成段；未完成或失败时占一行
       if (block.name === 'present_files') {
         const data = result?.data
         if (data?.kind === 'files') {
-          attachPresented(block.id, data.files)
+          addPresented(block.id, data.files)
           return
         }
         if (!result || status === 'failed') {
