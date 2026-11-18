@@ -161,6 +161,90 @@ export const writeFileBytes = async (
   return { path, size }
 }
 
+/** 上传文件挂载到 VFS 的目录：与模型自建文件隔离，避免同名覆盖 */
+export const UPLOAD_DIR = 'uploads'
+
+/** 按扩展名/ MIME 判定是否文本；解码失败再退回二进制 */
+const TEXT_EXTS = new Set([
+  'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'jsonl', 'ndjson', 'yaml', 'yml',
+  'xml', 'html', 'htm', 'css', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'vue', 'svelte',
+  'py', 'java', 'c', 'h', 'cpp', 'hpp', 'cc', 'cs', 'go', 'rs', 'rb', 'php', 'swift',
+  'kt', 'kts', 'scala', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'sql', 'toml', 'ini',
+  'cfg', 'conf', 'properties', 'env', 'log', 'tex', 'srt', 'vtt', 'gradle', 'svg',
+])
+
+const isTextLike = (name: string, mimeType: string) => {
+  if (mimeType.startsWith('text/')) {
+    return true
+  }
+  const dot = name.lastIndexOf('.')
+  return dot > 0 && TEXT_EXTS.has(name.slice(dot + 1).toLowerCase())
+}
+
+/** 文件名清洗：去掉路径分隔符与控制字符，限长，空名回退 file */
+const safeFileName = (raw: string) => {
+  const cleaned = [...raw]
+    .map((char) => {
+      const code = char.charCodeAt(0)
+      return code < 0x20 || '\\/:*?"<>|'.includes(char) ? '_' : char
+    })
+    .join('')
+    .trim()
+    .replace(/^\.+/, '')
+    .slice(0, 96)
+  return cleaned || 'file'
+}
+
+export type MountUpload = { name: string; mimeType: string; blob: Blob }
+export type MountResult = {
+  /** 已挂载：路径与类型 */
+  mounted: { path: string; kind: 'text' | 'binary' }[]
+  /** 配额不足或读写失败被跳过的原文件名 */
+  skipped: string[]
+}
+
+/**
+ * 把用户上传的文件挂到 uploads/ 下：文本类按 UTF-8 解码成文本，其余保留二进制与 MIME。
+ * 同名覆盖（工作副本语义，原件仍在附件里）；单个文件超限或写入失败时跳过，不影响其他文件。
+ */
+export const mountUploads = async (
+  sessionId: string,
+  uploads: MountUpload[]
+): Promise<MountResult> => {
+  const mounted: MountResult['mounted'] = []
+  const skipped: string[] = []
+  for (const upload of uploads) {
+    const path = `${UPLOAD_DIR}/${safeFileName(upload.name)}`
+    try {
+      let text: string | null = null
+      if (isTextLike(upload.name, upload.mimeType)) {
+        try {
+          // fatal 确保解不出来（GBK、UTF-16、真二进制）时退回二进制挂载
+          text = new TextDecoder('utf-8', { fatal: true }).decode(await upload.blob.arrayBuffer())
+        } catch {
+          text = null
+        }
+      }
+      if (text !== null) {
+        await writeFile(sessionId, path, text)
+        mounted.push({ path, kind: 'text' })
+      } else {
+        const bytes = new Uint8Array(await upload.blob.arrayBuffer())
+        await writeFileBytes(
+          sessionId,
+          path,
+          bytes,
+          upload.mimeType || upload.blob.type || 'application/octet-stream'
+        )
+        mounted.push({ path, kind: 'binary' })
+      }
+    } catch {
+      skipped.push(upload.name)
+    }
+  }
+  return { mounted, skipped }
+}
+
 /** 执行前的文件快照：文本内容与二进制原件（含 MIME）分开传输 */
 export const snapshot = async (
   sessionId: string
