@@ -197,6 +197,86 @@ export const settleReply = (
 export const getReplyText = (reply: AssistantMessage) =>
   reply.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('')
 
+/** 续写不能声明工具，模型可能把工具调用写成文本；把常见别名映射回本应用的工具名 */
+const TEXTUAL_TOOL_ALIASES: Record<string, string> = {
+  search: 'web_search',
+  web_search: 'web_search',
+  websearch: 'web_search',
+  deepseek_web_search: 'web_search',
+  fetch: 'fetch_url',
+  fetch_url: 'fetch_url',
+  open: 'fetch_url',
+  open_page: 'fetch_url',
+  read_link: 'fetch_url',
+  read_url: 'fetch_url',
+  browse: 'fetch_url',
+}
+
+export type TextualToolCall = { name: string; input: Record<string, unknown> }
+
+/** 把 <param>value</param> 形式的参数块拆成对象；重复键合并为数组 */
+const readTextualToolInput = (raw: string) => {
+  const input: Record<string, unknown> = {}
+  for (const match of raw.matchAll(/<([a-zA-Z_][\w-]*)>([\s\S]*?)<\/\1>/g)) {
+    const key = match[1]
+    const value = match[2].trim()
+    if (key === 'tool_name' || key === 'tool_params' || key === 'tool_use') {
+      continue
+    }
+    const existing = input[key]
+    input[key] =
+      existing === undefined ? value : Array.isArray(existing) ? [...existing, value] : [existing, value]
+  }
+  return input
+}
+
+/** 判断某个位置之前是否有未闭合的围栏代码块（``` 或 ~~~） */
+const insideCodeFence = (text: string, index: number) => {
+  let open = false
+  for (const line of text.slice(0, index).split('\n')) {
+    if (/^\s{0,3}(?:```|~~~)/.test(line)) {
+      open = !open
+    }
+  }
+  return open
+}
+
+/**
+ * 前缀续写不允许声明工具，部分模型会在正文里写出 <tool_use> 文本。
+ * 这里把第一个 <tool_use> 之后的内容当作调用块解析（该位置之后的文本是模型假设
+ * 工具已执行后的续写，无法采信，一并丢弃），返回清理后的正文与待执行的调用。
+ * 出现在围栏代码块里的标签视为示例，不执行。
+ */
+export const extractTextualToolCalls = (
+  text: string
+): { text: string; calls: TextualToolCall[] } => {
+  let start = -1
+  for (const match of text.matchAll(/<tool_use\b/gi)) {
+    if (!insideCodeFence(text, match.index ?? 0)) {
+      start = match.index ?? 0
+      break
+    }
+  }
+  if (start < 0) {
+    return { text, calls: [] }
+  }
+  const body = text.slice(start)
+  const calls: TextualToolCall[] = []
+  for (const match of body.matchAll(/<tool_use\b[^>]*>([\s\S]*?)(?:<\/tool_use>|$)/gi)) {
+    const inner = match[1]
+    const rawName = /<tool_name>([\s\S]*?)<\/tool_name>/i.exec(inner)?.[1]?.trim()
+    if (!rawName) {
+      continue
+    }
+    const params = /<tool_params>([\s\S]*?)(?:<\/tool_params>|$)/i.exec(inner)?.[1] ?? inner
+    calls.push({
+      name: TEXTUAL_TOOL_ALIASES[rawName.toLowerCase()] ?? rawName,
+      input: readTextualToolInput(params),
+    })
+  }
+  return { text: text.slice(0, start).trimEnd(), calls }
+}
+
 /** 可以直接续写的错误类型：网络中断、流错误、未正常结束或读流失败；鉴权/额度等错误重试无意义 */
 const CONTINUABLE_ERRORS = new Set(['network', 'stream', 'interrupted', 'protocol'])
 

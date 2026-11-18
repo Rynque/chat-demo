@@ -27,6 +27,7 @@ import { createLatestReminder } from './latestReminder.js'
 import {
   applyEvent,
   canContinueReply,
+  extractTextualToolCalls,
   getContextRounds,
   settleReply,
   toReplyMessages,
@@ -1120,6 +1121,54 @@ const generateTitle = async (sessionId: string, messages: MessageParam[], signal
 }
 
 /**
+ * 续写模式不能声明工具，模型可能把工具调用写成 <tool_use> 文本。
+ * 把这些标记从正文剥离并补成真实 tool_use，由调用方随后切回带工具的正常轮次；
+ * 只处理续写新增的文本块，避免误伤前缀里原有的内容。
+ */
+const salvageTextualToolCalls = (
+  reply: AssistantMessage,
+  fromIndex: number
+): { reply: AssistantMessage; calls: number } => {
+  const blocks: AssistantMessage['blocks'] = []
+  const calls: { name: string; input: Record<string, unknown> }[] = []
+  reply.blocks.forEach((block, index) => {
+    if (index < fromIndex || block.type !== 'text') {
+      blocks.push(block)
+      return
+    }
+    const result = extractTextualToolCalls(block.text)
+    if (result.calls.length === 0) {
+      blocks.push(block)
+      return
+    }
+    calls.push(...result.calls)
+    if (result.text) {
+      blocks.push({ ...block, text: result.text })
+    }
+  })
+  if (calls.length === 0) {
+    return { reply, calls: 0 }
+  }
+  return {
+    reply: {
+      ...reply,
+      blocks: [
+        ...blocks,
+        ...calls.map((call) => ({
+          type: 'tool_use' as const,
+          id: createId(),
+          name: call.name,
+          input: call.input,
+          status: 'running' as const,
+        })),
+      ],
+      stopReason: 'tool_use',
+    },
+    calls: calls.length,
+  }
+}
+
+/**
  * 工具轮次用完后的兜底提示：只随最后一次请求发出，不写入本地历史。
  * 届时请求不带工具，模型无法再调用，只能基于已有信息给出回答。
  */
@@ -1157,7 +1206,7 @@ const streamReply = async (
     /** 本次回复的工具轮次上限：开始时读取一次快照，生成中修改设置不影响本轮 */
     const maxToolRounds = useSettings.getState().toolRounds
     /** 前缀续写不允许携带函数调用：请求不声明 tools，历史里的工具往返也一并省略 */
-    const keepTools = !request.prefix
+    let continuationDisabled = false
     /** 本轮请求的 messages 前缀，关思考时用于补发标题请求 */
     let base: MessageParam[] = []
     /** 工具轮次用完后的兜底轮：请求不带工具，只输出一次回答 */
@@ -1165,6 +1214,9 @@ const streamReply = async (
     /** 上传文件只在首轮挂载一次；latest_reminder 只允许单行五段格式，不能再附加说明 */
     let mounted = !request.mounts || request.mounts.length === 0
     for (let round = request.resumeToolRound ? 1 : 0; ; round += 1) {
+      /** 本轮是否仍走前缀续写；识别到文本工具调用后切回带工具的正常轮次 */
+      const usePrefix = Boolean(request.prefix) && !continuationDisabled
+      const keepTools = !usePrefix
       /** 这一轮是否收到了正常的 message_stop */
       let complete = false
       for (let attempt = 0; ; attempt += 1) {
@@ -1179,16 +1231,17 @@ const streamReply = async (
             await mountUploads(sessionId, request.mounts ?? [])
           }
           // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
-          const latestReminder = prepared.prefix
-            ? prepared.prefix.latestReminder
-            : createLatestReminder(useSettings.getState())
+          const latestReminder =
+            usePrefix && prepared.prefix
+              ? prepared.prefix.latestReminder
+              : createLatestReminder(useSettings.getState())
           reply = { ...reply, latestReminder }
           updateReply(sessionId, reply)
           persist(sessionId)
           base = toRequestMessages(
             prepared.history,
             prepared.question,
-            prepared.prefix,
+            usePrefix ? prepared.prefix : undefined,
             latestReminder,
             keepTools
           )
@@ -1212,7 +1265,7 @@ const streamReply = async (
                 : {}),
               tools: finalAnswer || !keepTools ? [] : TOOL_DECLARATIONS,
               // 续写：末尾 assistant 作为前缀，Chat Completions 走 Beta 前缀补全
-              ...(request.prefix ? { continuation: true } : {}),
+              ...(usePrefix ? { continuation: true } : {}),
             },
             controller.signal
           )
@@ -1245,6 +1298,14 @@ const streamReply = async (
             }
           }
           reply = settleReply(reply, 'done', Date.now())
+          if (usePrefix) {
+            // 模型在续写里写出的文本工具调用：转成真实调用并切回带工具的正常轮次
+            const salvaged = salvageTextualToolCalls(reply, initial.blocks.length)
+            if (salvaged.calls > 0) {
+              reply = salvaged.reply
+              continuationDisabled = true
+            }
+          }
           complete = true
           if (reply.stopReason === 'tool_use') {
             // 停在工具调用上先把调用本身落盘：询问工具会挂起等用户回答，期间关闭页面不能丢块
