@@ -96,7 +96,16 @@ export type AskStep = {
 export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart[] }
 
 /** 工具调用前输出的说明文字 */
-export type PreambleStep = { type: 'text'; key: string; markdown: string }
+export type PreambleStep = {
+  type: 'text'
+  key: string
+  markdown: string
+  /** 这一段之后调用的 present_files 卡片：显示在段落末尾 */
+  presentedFiles: PresentedFile[]
+}
+
+/** 没有前置段落时单独成段的产出文件 */
+export type PresentedStep = { type: 'files'; key: string; files: PresentedFile[] }
 
 export type Step =
   | SearchStep
@@ -107,6 +116,7 @@ export type Step =
   | PreambleStep
   | ToolStep
   | AskStep
+  | PresentedStep
 
 export type ReplyView = {
   steps: Step[]
@@ -265,9 +275,34 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
     }
     const { markdown } = joinTextBlocks(pendingText, registry)
     if (markdown.trim()) {
-      steps.push({ type: 'text', key: `text-${pendingText[0].index}`, markdown })
+      steps.push({
+        type: 'text',
+        key: `text-${pendingText[0].index}`,
+        markdown,
+        presentedFiles: [],
+      })
     }
     pendingText = []
+  }
+
+  /** 把本次展示的文件挂到最近一段说明文字的末尾；没有段落时单独成段 */
+  const attachPresented = (blockId: string, files: PresentedFile[]) => {
+    flushPreamble()
+    const last = steps.at(-1)
+    if (last?.type === 'text') {
+      for (const file of files) {
+        if (!last.presentedFiles.some((item) => item.path === file.path)) {
+          last.presentedFiles.push(file)
+        }
+      }
+      return
+    }
+    const seen = new Set<string>()
+    steps.push({
+      type: 'files',
+      key: blockId,
+      files: files.filter((file) => (seen.has(file.path) ? false : (seen.add(file.path), true))),
+    })
   }
 
   reply.blocks.forEach((block, index) => {
@@ -324,14 +359,20 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
         }
         return
       }
-      // 产出文件：结果到了由回复末尾的卡片展示，不进时间线
+      // 产出文件：成功时卡片挂在所在段落末尾（最终正文末尾还会汇总，见 presentedFiles）；
+      // 未完成或失败时占一行
       if (block.name === 'present_files') {
-        if (!result) {
+        const data = result?.data
+        if (data?.kind === 'files') {
+          attachPresented(block.id, data.files)
+          return
+        }
+        if (!result || status === 'failed') {
           steps.push({
             type: 'tool',
             key: block.id,
             name: block.name,
-            summary: translate('presentFilesPreparing'),
+            summary: translate(result ? 'presentFilesFailed' : 'presentFilesPreparing'),
             status,
           })
         }

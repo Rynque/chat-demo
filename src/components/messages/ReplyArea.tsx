@@ -33,6 +33,7 @@ import {
 import { Tooltip } from '../base/Tooltip.js'
 import { Markdown } from '../markdown/Markdown.js'
 import { AskQuestionCard } from './AskQuestionCard.js'
+import { PresentedFiles } from './PresentedFiles.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
 import styles from './ReplyArea.module.css'
@@ -119,7 +120,8 @@ const stepKey = (step: Step, index: number) =>
   step.type === 'text' ||
   step.type === 'search' ||
   step.type === 'tool' ||
-  step.type === 'ask'
+  step.type === 'ask' ||
+  step.type === 'files'
     ? step.key
     : `${step.type}-${index}`
 
@@ -157,7 +159,8 @@ const StepItem = ({
       )
     }
     case 'text':
-      // 工具调用之间的说明文字按正文渲染：不带圆点、折叠思考过程时也不隐藏
+      // 工具调用之间的说明文字按正文渲染：不带圆点、折叠思考过程时也不隐藏；
+      // 本段之后调用 present_files 的卡片挂在这段末尾
       return (
         <div className={styles.narrative}>
           <Markdown
@@ -168,6 +171,15 @@ const StepItem = ({
             disableLink={false}
             sources={sources}
           />
+          {step.presentedFiles.length > 0 ? (
+            <PresentedFiles sessionId={sessionId} files={step.presentedFiles} />
+          ) : null}
+        </div>
+      )
+    case 'files':
+      return (
+        <div className={styles.narrative}>
+          <PresentedFiles sessionId={sessionId} files={step.files} />
         </div>
       )
     case 'search':
