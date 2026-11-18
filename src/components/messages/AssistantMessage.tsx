@@ -144,10 +144,9 @@ export const AssistantMessage = memo(function AssistantMessage({
           </span>
         </div>
       ) : null}
-      {/* 最终正文末尾汇总本轮全部产出文件；正文为空时卡片的调用位置已在时间线末尾，
-          不再重复渲染一遍 */}
+      {/* 最终正文末尾只展示卡片，不再重复「产出文件」标题 */}
       {answer && view.presentedFiles.length > 0 ? (
-        <PresentedFiles sessionId={sessionId} files={view.presentedFiles} />
+        <PresentedFiles sessionId={sessionId} files={view.presentedFiles} showLabel={false} />
       ) : null}
       {streaming ? null : (
         <div className={styles.bottom}>
