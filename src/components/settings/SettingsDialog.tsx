@@ -24,8 +24,11 @@ import {
   setLocale,
   setLocation,
   setThemePreference,
+  setToolRounds,
   setTtsVoice,
   setVfsLimits,
+  TOOL_ROUNDS_MAX,
+  TOOL_ROUNDS_MIN,
   useSettings,
   type ThemePreference,
 } from '../../services/settings.js'
@@ -103,6 +106,7 @@ const SettingsContent = () => {
               <ThemeSetting />
               <LocaleSetting />
               <TtsVoiceSetting />
+              <ToolRoundsSetting />
               <LocationSetting />
             </>
           ) : section === 'data' ? (
@@ -138,6 +142,55 @@ const SettingsContent = () => {
   )
 }
 
+/** 数字输入：只在合法范围内提交，避免保存中间态 */
+const numberField = (
+  label: string,
+  value: number,
+  unit: string,
+  min: number,
+  max: number,
+  onChange: (next: number) => void
+) => (
+  <div className={styles.numberField}>
+    <input
+      type="number"
+      inputMode="numeric"
+      min={min}
+      max={max}
+      value={value}
+      aria-label={label}
+      onChange={(event) => {
+        const next = Number(event.target.value)
+        if (Number.isFinite(next) && next >= min && next <= max) {
+          onChange(Math.floor(next))
+        }
+      }}
+    />
+    <span className={styles.numberUnit}>{unit}</span>
+  </div>
+)
+
+/** 工具调用轮次：与脚本、检索等所有客户端工具共用，用完强制模型直接作答 */
+const ToolRoundsSetting = () => {
+  const t = useTranslate()
+  const rounds = useSettings((state) => state.toolRounds)
+  return (
+    <SettingCell
+      label={t('settingsToolRounds')}
+      description={t('settingsToolRoundsDescription')}
+      status={null}
+      action={numberField(
+        t('settingsToolRounds'),
+        rounds,
+        t('settingsToolRoundsUnit'),
+        TOOL_ROUNDS_MIN,
+        TOOL_ROUNDS_MAX,
+        setToolRounds
+      )}
+    />
+  )
+}
+
 /** 虚拟文件配额：脚本与文件工具共用，界面按 KB 输入、内部按字节保存 */
 const VirtualFilesSetting = () => {
   const t = useTranslate()
@@ -157,33 +210,6 @@ const VirtualFilesSetting = () => {
       cancelled = true
     }
   }, [limits])
-
-  const numberField = (
-    label: string,
-    value: number,
-    unit: string,
-    min: number,
-    max: number,
-    onChange: (next: number) => void
-  ) => (
-    <div className={styles.numberField}>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={min}
-        max={max}
-        value={value}
-        aria-label={label}
-        onChange={(event) => {
-          const next = Number(event.target.value)
-          if (Number.isFinite(next) && next >= min && next <= max) {
-            onChange(Math.floor(next))
-          }
-        }}
-      />
-      <span className={styles.numberUnit}>{unit}</span>
-    </div>
-  )
 
   const formatSize = (bytes: number) =>
     bytes < 1024
