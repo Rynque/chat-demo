@@ -969,10 +969,6 @@ const pendingToolCalls = (reply: AssistantMessage): ToolCallPart[] => {
   )
 }
 
-/** 本轮是否已经向用户展示过产出文件（终止型工具的完整结果） */
-const hasPresentedFiles = (reply: AssistantMessage): boolean =>
-  reply.blocks.some((block) => block.type === 'tool_result' && block.data?.kind === 'files')
-
 /**
  * 结果静态的检索类工具：同名同参的重复调用不再执行，直接复用上次结果并提醒模型换思路，
  * 避免无限重试或重复搜索。其余工具的重复调用可能是有意为之（如重读改过的文件），照常执行。
@@ -1121,7 +1117,7 @@ const TOOL_LIMIT_NUDGE = '工具调用次数已达上限。不要再尝试调用
  * 消息请求走 Chat Completions（非思考模式也支持客户端工具），内部事件仍按原有方式处理。
  * 回复停在客户端工具调用上时本地执行工具、回传结果并继续下一轮，最多 MAX_TOOL_ROUNDS 轮；
  * 轮次用完不再中断，先补齐结果，再以不带工具的请求让模型至少输出一次回答。
- * present_files 是终止型工具：合成结果后本轮直接结束，不再请求下一轮。
+ * 所有客户端工具（含 present_files）都是普通工具，执行后照常续轮。
  * 补传失败时回复记为 upload 错误，可重试。
  * 服务端判定 file_id 失效时重新补传后重发，退避重试且次数有上限，超过则按原始报错收尾。
  */
@@ -1293,10 +1289,7 @@ const streamReply = async (
         reply = settleReply(reply, 'stopped', Date.now())
         break
       }
-      // present_files 是终止型工具：结果已向用户展示，本轮到此结束，不再请求下一轮
-      if (hasPresentedFiles(reply)) {
-        break
-      }
+      // present_files 只是普通工具：结果已交给界面渲染，模型可以继续说话或继续调用
       if (round >= MAX_TOOL_ROUNDS - 1) {
         // 最后一轮工具往返执行完就转入兜底：下一轮不带工具，让模型至少输出一次回答
         finalAnswer = true
