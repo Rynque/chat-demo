@@ -202,6 +202,12 @@ export type CreateMessageRequest = {
   thinking: { type: 'enabled' | 'disabled' }
   tools: ClientToolDeclaration[]
   title?: { enabled: boolean }
+  /**
+   * 对话前缀续写：末尾的 assistant 作为前缀，让服务端接着写。
+   * Chat Completions 需要 Beta 地址并给末尾 assistant 加 prefix: true；
+   * 思考模式下 prefix 与 reasoning_content 搭配使用。
+   */
+  continuation?: boolean
 }
 
 // ---------- 响应：流式事件 ----------

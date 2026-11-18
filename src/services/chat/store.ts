@@ -1208,6 +1208,8 @@ const streamReply = async (
                 ? { title: { enabled: true } }
                 : {}),
               tools: finalAnswer ? [] : TOOL_DECLARATIONS,
+              // 续写：末尾 assistant 作为前缀，Chat Completions 走 Beta 前缀补全
+              ...(request.prefix ? { continuation: true } : {}),
             },
             controller.signal
           )

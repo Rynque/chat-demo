@@ -48,6 +48,8 @@ type ChatMessage =
       /** 开启思考模式且请求携带 tools 时，历史轮次的思维链必须完整回传 */
       reasoning_content?: string
       tool_calls?: ChatToolCall[]
+      /** Beta 前缀续写：末尾 assistant 设为 true，服务端从该内容之后接着写 */
+      prefix?: boolean
     }
   | { role: 'tool'; tool_call_id: string; content: string }
 
@@ -303,18 +305,28 @@ const toChatMessages = (request: CreateMessageRequest): ChatMessage[] => {
   return messages
 }
 
-const toChatRequest = (request: CreateMessageRequest): ChatCompletionRequest => ({
-  model: request.model,
-  messages: toChatMessages(request),
-  thinking: request.thinking,
-  tools: request.tools.map(({ name, description, input_schema }) => ({
-    type: 'function',
-    function: { name, description, parameters: input_schema },
-  })),
-  ...(request.title ? { title: request.title } : {}),
-  stream: true,
-  stream_options: { include_usage: true },
-})
+const toChatRequest = (request: CreateMessageRequest): ChatCompletionRequest => {
+  const messages = toChatMessages(request)
+  if (request.continuation) {
+    // Beta 前缀续写：末尾 assistant 必须带 prefix: true；content 不能为空
+    const last = messages.at(-1)
+    if (last?.role === 'assistant') {
+      messages[messages.length - 1] = { ...last, content: last.content ?? '', prefix: true }
+    }
+  }
+  return {
+    model: request.model,
+    messages,
+    thinking: request.thinking,
+    tools: request.tools.map(({ name, description, input_schema }) => ({
+      type: 'function',
+      function: { name, description, parameters: input_schema },
+    })),
+    ...(request.title ? { title: request.title } : {}),
+    stream: true,
+    stream_options: { include_usage: true },
+  }
+}
 
 type OpenBlock = { index: number; kind: 'thinking' | 'text' }
 
@@ -338,7 +350,12 @@ export async function* streamChatMessage(
   request: CreateMessageRequest,
   signal: AbortSignal
 ): AsyncGenerator<MessageStreamEvent> {
-  const response = await httpRequest(`${API_ORIGIN}/chat/completions`, {
+  // 前缀续写属于 Beta 功能，必须走 /beta；普通请求仍用正式地址
+  const base = API_ORIGIN.replace(/\/+$/, '')
+  const url = request.continuation
+    ? `${base.endsWith('/beta') ? base : `${base}/beta`}/chat/completions`
+    : `${base}/chat/completions`
+  const response = await httpRequest(url, {
     method: 'POST',
     headers: {
       // Chat Completions 用 Bearer 鉴权；文档：/zh-cn/api/create-chat-completion#身份验证
