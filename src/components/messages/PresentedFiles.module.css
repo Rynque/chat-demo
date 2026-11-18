@@ -95,10 +95,11 @@
   }
 }
 
-/* 预览弹窗里的文本 */
+/* 预览弹窗里的文本：占满正文区并自己滚动（宽版桌面限高、移动端整屏） */
 .preview {
+  flex: 1;
+  min-height: 0;
   margin: 0;
-  max-height: 60vh;
   overflow: auto;
   font-family: var(--ds-font-family-code);
   font-size: 12px;

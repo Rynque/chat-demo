@@ -5,7 +5,7 @@ import { getExtension, formatSize } from '../../services/attachments.js'
 import type { PresentedFile } from '../../services/chat/types.js'
 import { showToast } from '../base/toastState.js'
 import { Modal } from '../base/Modal.js'
-import { Button } from '../base/Button.js'
+import { IconButton } from '../base/IconButton.js'
 import { IconBrowseOutline16, IconDownloadOutline16 } from '../base/icons.js'
 import { FileIcon } from '../files/FileIcon.js'
 import styles from './PresentedFiles.module.css'
@@ -99,17 +99,16 @@ export const PresentedFiles = ({
         <Modal
           title={preview.file.title}
           closable
-          onClose={() => setPreview(null)}
-          footer={
-            <Button
-              onClick={() => {
-                void downloadFile(sessionId, preview.file)
-                setPreview(null)
-              }}
-            >
-              {t('presentFileDownload')}
-            </Button>
+          variant="wide"
+          leading={
+            <IconButton
+              icon={<IconDownloadOutline16 />}
+              tooltip={t('presentFileDownload')}
+              aria-label={t('presentFileDownload')}
+              onClick={() => void downloadFile(sessionId, preview.file)}
+            />
           }
+          onClose={() => setPreview(null)}
         >
           <pre className={styles.preview}>{preview.content}</pre>
         </Modal>
