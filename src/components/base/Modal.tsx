@@ -14,7 +14,9 @@ export const Modal = ({
   title,
   children,
   footer,
+  leading,
   closable = false,
+  variant = 'default',
   className,
   mainClassName,
   onClose,
@@ -22,8 +24,12 @@ export const Modal = ({
   title: ReactNode
   children?: ReactNode
   footer?: ReactNode
+  /** 标题栏左侧的操作（如预览里的下载），位置对应搜索框的放大镜 */
+  leading?: ReactNode
   /** 标题栏右侧显示关闭按钮 */
   closable?: boolean
+  /** wide：桌面端更宽的阅读面板，移动端全屏 */
+  variant?: 'default' | 'wide'
   className?: string
   /** 内容区的 class */
   mainClassName?: string
@@ -50,16 +56,17 @@ export const Modal = ({
 
   return createPortal(
     <div
-      className={styles.overlay}
+      className={clsx(styles.overlay, variant === 'wide' && styles.overlayWide)}
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <div
-        className={clsx(styles.content, className)}
+        className={clsx(styles.content, variant === 'wide' && styles.wide, className)}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
         <div className={styles.header}>
+          {leading ? <div className={styles.leading}>{leading}</div> : null}
           <div id={titleId} className={styles.title}>
             {title}
           </div>

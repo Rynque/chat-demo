@@ -41,10 +41,23 @@
   margin-bottom: var(--modal-header-gap, 12px);
 }
 
+.leading {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin-right: 4px;
+  margin-left: -10px;
+}
+
 .title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   font-size: 16px;
   line-height: 24px;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .close {
@@ -65,4 +78,38 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 20px;
+}
+
+/* 宽版：桌面端占部分宽度、限高，正文区域自己滚动；移动端整屏 */
+.wide {
+  width: 660px;
+  max-width: calc(100vw - 32px);
+  max-height: 72vh;
+}
+
+.wide .main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media not all and (min-width: 768px) {
+  .overlayWide {
+    align-items: stretch;
+    justify-content: stretch;
+    background-color: var(--dsw-alias-bg-base);
+    backdrop-filter: none;
+  }
+
+  .wide {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    padding: 16px;
+    border-radius: 0;
+    box-shadow: none;
+  }
 }
