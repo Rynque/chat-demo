@@ -104,10 +104,6 @@
   opacity: 1;
 }
 
-.continueButton {
-  margin-left: auto;
-}
-
 .summary {
   display: flex;
   align-items: center;

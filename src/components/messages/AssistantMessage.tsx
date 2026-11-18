@@ -1,7 +1,11 @@
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo } from 'react'
-import { IconRefreshOutline16, IconWarningOutline16 } from '../base/icons.js'
+import {
+  IconContinueOutline16,
+  IconRefreshOutline16,
+  IconWarningOutline16,
+} from '../base/icons.js'
 import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
 import { continueReply, regenerateReply } from '../../services/chat/store.js'
@@ -9,7 +13,6 @@ import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { IconButton } from '../base/IconButton.js'
-import { Button } from '../base/Button.js'
 import { Markdown } from '../markdown/Markdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
@@ -154,6 +157,18 @@ export const AssistantMessage = memo(function AssistantMessage({
             {responseText && !refused ? (
               <ReadAloudButton messageId={message.id} text={responseText} />
             ) : null}
+            {isLast && canContinueReply(message) ? (
+              <IconButton
+                icon={<IconContinueOutline16 />}
+                tooltip={t('continueGenerating')}
+                tooltipPlacement="bottom"
+                disabled={busy}
+                onClick={() => {
+                  stopReadAloud()
+                  continueReply(sessionId, message.id)
+                }}
+              />
+            ) : null}
             <IconButton
               icon={<IconRefreshOutline16 />}
               tooltip={t('regenerate')}
@@ -165,20 +180,6 @@ export const AssistantMessage = memo(function AssistantMessage({
               }}
             />
           </div>
-          {isLast && canContinueReply(message) ? (
-            <Button
-              variant="outlined"
-              size="s"
-              className={styles.continueButton}
-              disabled={busy}
-              onClick={() => {
-                stopReadAloud()
-                continueReply(sessionId, message.id)
-              }}
-            >
-              {t('continueGenerating')}
-            </Button>
-          ) : null}
         </div>
       )}
     </div>

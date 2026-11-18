@@ -231,6 +231,20 @@ export const IconRefreshOutline16 = () => (
   </svg>
 )
 
+/** 继续生成：双箭头向右，接在中断内容的后面 */
+export const IconContinueOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M3.2 4.4 7 8l-3.8 3.6M8.6 4.4 12.4 8l-3.8 3.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 export const IconSendOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

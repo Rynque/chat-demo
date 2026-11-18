@@ -197,8 +197,11 @@ export const settleReply = (
 export const getReplyText = (reply: AssistantMessage) =>
   reply.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('')
 
+/** 可以直接续写的错误类型：网络中断、流错误、未正常结束或读流失败；鉴权/额度等错误重试无意义 */
+const CONTINUABLE_ERRORS = new Set(['network', 'stream', 'interrupted', 'protocol'])
+
 /**
- * 只有正常达到输出上限或被停止的回复可续写，报错回复不能续写。
+ * 可续写：正常达到输出上限、被用户停止，或网络类错误中断且已有部分内容。
  * 末条限制由调用方判断，拒绝和客户端工具调用不能续写。
  * 本轮含服务端工具调用或结果（含 READ_LINK 和孤立结果块）的回复不能续写。
  * 服务端模板提示不能作为续写前缀。
@@ -220,8 +223,20 @@ export const canContinueReply = (reply: AssistantMessage): boolean => {
   ) {
     return false
   }
+  const partial = reply.blocks.some(
+    (block) =>
+      (block.type === 'text' && block.text.trim() !== '') ||
+      (block.type === 'thinking' && block.thinking.trim() !== '')
+  )
+  if (!partial) {
+    return false
+  }
+  const recoverable =
+    reply.status === 'error' && !!reply.error && CONTINUABLE_ERRORS.has(reply.error.kind)
   return (
-    reply.status === 'stopped' || (reply.status === 'done' && reply.stopReason === 'max_tokens')
+    recoverable ||
+    reply.status === 'stopped' ||
+    (reply.status === 'done' && reply.stopReason === 'max_tokens')
   )
 }
 
