@@ -105,6 +105,10 @@ export const HistorySearch = ({ onClose }: { onClose: () => void }) => {
     }
     const run = (runRef.current += 1)
     setStatus('searching')
+    // 新关键词开始检索时清掉上一轮结果，避免旧条目与加载状态同时渲染
+    setHits([])
+    setScanned(0)
+    setMore(false)
     setActive(0)
     const timer = setTimeout(() => {
       void searchHistory(keyword, sessions)
